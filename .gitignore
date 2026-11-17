@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+exportaciones/
+build/
+.flet/
+inventario.db
+inventario.db-wal
+inventario.db-shm
+*.apk

@@ -1,0 +1,18 @@
+[project]
+name = "inventariopro"
+version = "1.0.0"
+description = "Sistema de Inventario Offline LiquidCCS (Python + SQLite + Flet)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "flet==1.1.2"
+]
+
+[tool.flet]
+org = "com.liquidccs"
+product = "Inventario Pro"
+company = "LiquidCCS"
+copyright = "Copyright (C) 2026 LiquidCCS"
+
+[tool.flet.app]
+path = "."
