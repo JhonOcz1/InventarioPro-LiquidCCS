@@ -36,7 +36,7 @@ def _generar_pdf_puro_python(pdf_path: str, productos: List[Dict[str, Any]], tas
 
     total_unidades = sum(p["cantidad"] for p in productos)
     total_valor_usd = sum(
-        (p["precio_descuento_usd"] if p["precio_descuento_usd"] is not None else (p["precio_detal_usd"] or 0.0)) * p["cantidad"]
+        (p["precio_detal_usd"] if p["precio_detal_usd"] is not None else (p["precio_descuento_usd"] or 0.0)) * p["cantidad"]
         for p in productos if p["cantidad"] > 0
     )
     total_bs_str = f"Bs. {total_valor_usd * tasa_bcv:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -264,7 +264,7 @@ def exportar_inventario_pdf(productos: List[Dict[str, Any]], tasa_bcv: float, fi
             costo = p["costo_usd"]
 
             if cant > 0 and (precio_detal or precio_desc):
-                base = precio_desc if precio_desc is not None else precio_detal
+                base = precio_detal if precio_detal is not None else precio_desc
                 total_valor_usd += (base * cant)
 
             detal_usd_str = f"${precio_detal:,.2f}" if precio_detal is not None else "-"
@@ -336,7 +336,7 @@ def exportar_inventario_html(productos: List[Dict[str, Any]], tasa_bcv: float) -
         costo = p["costo_usd"]
 
         if cant > 0 and (precio_detal or precio_desc):
-            base = precio_desc if precio_desc is not None else precio_detal
+            base = precio_detal if precio_detal is not None else precio_desc
             total_valor_usd += (base * cant)
 
         detal_usd = f"${precio_detal:,.2f}" if precio_detal is not None else "-"

@@ -50,6 +50,10 @@ def main(page: ft.Page):
     # Referencias en memoria a los controles de cada tarjeta visible para actualización instantánea (+/-)
     tarjetas_ui_refs: Dict[int, Dict[str, Any]] = {}
 
+    # FilePicker para importación de inventario compatible con Android APK y PC
+    file_picker = ft.FilePicker()
+    page.overlay.append(file_picker)
+
     def obtener_ancho_modal() -> int:
         """Calcula un ancho de ventana modal adaptable tanto a celular (360px) como a PC."""
         ancho_pag = getattr(page, "width", None) or 480
@@ -708,9 +712,17 @@ def main(page: ft.Page):
 
         dlg = ft.AlertDialog(
             title=ft.Row([
-                ft.Icon(ft.Icons.ADD_BOX_ROUNDED, color="#0284C7"),
-                ft.Text("Nuevo Artículo", size=16, weight=ft.FontWeight.BOLD)
-            ], spacing=8),
+                ft.Row([
+                    ft.Icon(ft.Icons.ADD_BOX_ROUNDED, color="#059669"),
+                    ft.Text("Nuevo Artículo", size=16, weight=ft.FontWeight.BOLD)
+                ], spacing=8),
+                ft.IconButton(
+                    icon=ft.Icons.CLOSE_ROUNDED,
+                    icon_color="#64748B",
+                    tooltip="Cerrar",
+                    on_click=cerrar_dialogo
+                )
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             content=ft.Container(
                 content=ft.Column(
                     controls=[
@@ -718,23 +730,34 @@ def main(page: ft.Page):
                         ft.Row([in_nombre], spacing=8),
                         ft.Row([in_detal, in_desc], spacing=8),
                         txt_preview_bs,
-                        ft.Row([in_costo, in_ubicacion], spacing=8)
+                        ft.Row([in_costo, in_ubicacion], spacing=8),
+                        ft.Divider(height=14, color="#E2E8F0"),
+                        ft.FilledButton(
+                            content="Guardar Artículo",
+                            icon=ft.Icons.CHECK_CIRCLE_ROUNDED,
+                            bgcolor="#059669",
+                            color=ft.Colors.WHITE,
+                            height=44,
+                            on_click=guardar_nuevo_articulo
+                        ),
+                        ft.TextButton(
+                            content="Cancelar",
+                            on_click=cerrar_dialogo
+                        )
                     ],
                     spacing=10,
-                    tight=True
+                    scroll=ft.ScrollMode.ADAPTIVE,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH
                 ),
-                width=obtener_ancho_modal()
+                width=obtener_ancho_modal(),
+                padding=ft.Padding.only(top=4, bottom=6)
             ),
-            actions=[
-                ft.TextButton(content="Cancelar", on_click=cerrar_dialogo),
-                ft.FilledButton(content="Guardar", icon=ft.Icons.CHECK, bgcolor="#059669", color=ft.Colors.WHITE, on_click=guardar_nuevo_articulo)
-            ],
-            actions_alignment=ft.MainAxisAlignment.END
+            actions=[]
         )
         page.show_dialog(dlg)
 
     # =========================================================================
-    # MODAL 2: DETALLES COMPLETOS Y EDICIÓN DE ARTÍCULO
+    # MODAL 2: DETALLES COMPLETOS Y EDICIÓN DE ARTÍCULO (SIN DESAJUSTE DE TECLADO)
     # =========================================================================
     def abrir_modal_detalle(producto_id: int):
         p = database.obtener_producto_por_id(producto_id)
@@ -812,11 +835,20 @@ def main(page: ft.Page):
             page.pop_dialog()
             confirmar_eliminar_producto(producto_id)
 
+        # Se colocan los botones DENTRO de la columna con scroll para evitar desajustes con teclado táctil en celular
         dlg = ft.AlertDialog(
             title=ft.Row([
-                ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, color="#0284C7"),
-                ft.Text(f"Editar: {p['sku']}", size=16, weight=ft.FontWeight.BOLD)
-            ], spacing=8),
+                ft.Row([
+                    ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, color="#0284C7"),
+                    ft.Text(f"Editar: {p['sku']}", size=16, weight=ft.FontWeight.BOLD)
+                ], spacing=8),
+                ft.IconButton(
+                    icon=ft.Icons.CLOSE_ROUNDED,
+                    icon_color="#64748B",
+                    tooltip="Cerrar",
+                    on_click=cerrar_dialogo
+                )
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             content=ft.Container(
                 content=ft.Column(
                     controls=[
@@ -825,18 +857,267 @@ def main(page: ft.Page):
                         ft.Row([ed_detal, ed_desc], spacing=8),
                         lbl_info_bs,
                         ft.Row([ed_costo, ed_ubicacion], spacing=8),
+                        ft.Divider(height=14, color="#E2E8F0"),
+                        ft.FilledButton(
+                            content="Guardar Cambios",
+                            icon=ft.Icons.SAVE_ROUNDED,
+                            bgcolor="#0284C7",
+                            color=ft.Colors.WHITE,
+                            height=44,
+                            on_click=guardar_cambios
+                        ),
+                        ft.Row(
+                            controls=[
+                                ft.TextButton(
+                                    content="Eliminar Artículo",
+                                    icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
+                                    icon_color="#DC2626",
+                                    on_click=eliminar_desde_modal
+                                ),
+                                ft.TextButton(
+                                    content="Cancelar",
+                                    on_click=cerrar_dialogo
+                                )
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                        )
                     ],
                     spacing=10,
-                    tight=True
+                    scroll=ft.ScrollMode.ADAPTIVE,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH
                 ),
-                width=obtener_ancho_modal()
+                width=obtener_ancho_modal(),
+                padding=ft.Padding.only(top=4, bottom=6)
             ),
-            actions=[
-                ft.TextButton(content="Eliminar", icon=ft.Icons.DELETE_OUTLINE, icon_color="#DC2626", on_click=eliminar_desde_modal),
-                ft.TextButton(content="Cancelar", on_click=cerrar_dialogo),
-                ft.FilledButton(content="Guardar", icon=ft.Icons.SAVE_ROUNDED, bgcolor="#0284C7", color=ft.Colors.WHITE, on_click=guardar_cambios)
-            ],
-            actions_alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+            actions=[]
+        )
+        page.show_dialog(dlg)
+
+    # =========================================================================
+    # MODAL: VER / DESCARGAR PLANTILLA DE IMPORTACIÓN
+    # =========================================================================
+    def abrir_modal_plantilla(campo_texto_destino=None):
+        texto_plantilla = database.obtener_texto_plantilla_csv()
+
+        def descargar_plantilla(ev):
+            try:
+                ruta_descarga = database.generar_archivo_plantilla_csv()
+                notificar(f"Plantilla descargada: {ruta_descarga}")
+                try:
+                    if sys.platform.startswith("win"):
+                        os.startfile(os.path.dirname(ruta_descarga))
+                    else:
+                        webbrowser.open(f"file://{os.path.dirname(ruta_descarga)}")
+                except Exception:
+                    pass
+            except Exception as ex:
+                notificar(f"Error al descargar plantilla: {ex}", es_error=True)
+
+        def copiar_al_editor(ev):
+            if campo_texto_destino:
+                campo_texto_destino.value = texto_plantilla
+                page.update()
+                page.pop_dialog()
+                notificar("Plantilla cargada en el área de importación.")
+
+        txt_codigo = ft.TextField(
+            value=texto_plantilla,
+            multiline=True,
+            read_only=True,
+            min_lines=8,
+            max_lines=11,
+            text_size=11,
+            border_radius=8,
+            border_color="#CBD5E1",
+            bgcolor="#F1F5F9"
+        )
+
+        dlg = ft.AlertDialog(
+            title=ft.Row([
+                ft.Row([
+                    ft.Icon(ft.Icons.DESCRIPTION_ROUNDED, color="#0284C7"),
+                    ft.Text("Plantilla de Importación", size=15, weight=ft.FontWeight.BOLD)
+                ], spacing=8),
+                ft.IconButton(ft.Icons.CLOSE_ROUNDED, icon_color="#64748B", tooltip="Cerrar", on_click=lambda x: page.pop_dialog())
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text(
+                            "Columnas admitidas (separadas por comas o punto y coma):\n"
+                            "sku, nombre, cantidad, precio_detal_usd, precio_descuento_usd, costo_usd, ubicacion_nota",
+                            size=12,
+                            color="#475569"
+                        ),
+                        txt_codigo,
+                        ft.Row(
+                            controls=[
+                                ft.FilledTonalButton(
+                                    content="Descargar CSV",
+                                    icon=ft.Icons.DOWNLOAD_ROUNDED,
+                                    on_click=descargar_plantilla
+                                ),
+                                ft.FilledButton(
+                                    content="Cargar en Editor",
+                                    icon=ft.Icons.INPUT_ROUNDED,
+                                    bgcolor="#0284C7",
+                                    color=ft.Colors.WHITE,
+                                    on_click=copiar_al_editor,
+                                    visible=(campo_texto_destino is not None)
+                                )
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            wrap=True
+                        )
+                    ],
+                    spacing=10,
+                    scroll=ft.ScrollMode.ADAPTIVE,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH
+                ),
+                width=obtener_ancho_modal(),
+                padding=ft.Padding.only(top=4, bottom=6)
+            ),
+            actions=[]
+        )
+        page.show_dialog(dlg)
+
+    # =========================================================================
+    # MODAL: IMPORTACIÓN DE ARTÍCULOS (CSV / SVG / TXT / PEGAR)
+    # =========================================================================
+    def abrir_modal_importar(e=None):
+        txt_import_input = ft.TextField(
+            label="Pegar filas CSV / Tabla aquí",
+            hint_text="INV-301,DISCO SSD 1TB,3,65.00,60.00,45.00,BRIAN\nINV-302,FUENTE EVGA 600W,2,55.00,,38.00,ESTANTE A",
+            multiline=True,
+            min_lines=5,
+            max_lines=8,
+            text_size=12,
+            border_radius=8,
+            border_color="#94A3B8"
+        )
+
+        def ejecutar_importacion_texto(ev):
+            raw = txt_import_input.value.strip() if txt_import_input.value else ""
+            if not raw:
+                notificar("Pega el texto CSV o selecciona un archivo primero", es_error=True)
+                return
+
+            res = database.importar_productos_desde_csv(raw)
+            if res.get("exito"):
+                page.pop_dialog()
+                actualizar_kpis()
+                recargar_datos_y_renderizar()
+                notificar(f"Importación completada: {res['nuevos']} nuevos, {res['actualizados']} actualizados.")
+            else:
+                notificar(f"Error al importar: {res.get('mensaje', 'Verifique el formato')}", es_error=True)
+
+        def al_seleccionar_archivo(file_event: ft.FilePickerResultEvent):
+            if not file_event.files or len(file_event.files) == 0:
+                return
+            archivo_sel = file_event.files[0]
+            ruta = archivo_sel.path
+            if not ruta or not os.path.isfile(ruta):
+                notificar("No se pudo leer la ruta del archivo seleccionado", es_error=True)
+                return
+
+            res = database.importar_productos_desde_csv(ruta)
+            if res.get("exito"):
+                page.pop_dialog()
+                actualizar_kpis()
+                recargar_datos_y_renderizar()
+                notificar(f"Importados desde {archivo_sel.name}: {res['nuevos']} nuevos, {res['actualizados']} actualizados.")
+            else:
+                notificar(f"Error: {res.get('mensaje', 'Error al procesar archivo')}", es_error=True)
+
+        file_picker.on_result = al_seleccionar_archivo
+
+        def seleccionar_archivo_click(ev):
+            file_picker.pick_files(
+                dialog_title="Seleccionar archivo de inventario (CSV / SVG / TXT)",
+                allowed_extensions=["csv", "svg", "txt", "tsv"]
+            )
+
+        def descargar_plantilla_directa(ev):
+            try:
+                ruta = database.generar_archivo_plantilla_csv()
+                notificar(f"Plantilla guardada: {ruta}")
+                try:
+                    if sys.platform.startswith("win"):
+                        os.startfile(os.path.dirname(ruta))
+                except Exception:
+                    pass
+            except Exception as ex:
+                notificar(f"Error: {ex}", es_error=True)
+
+        dlg = ft.AlertDialog(
+            title=ft.Row([
+                ft.Row([
+                    ft.Icon(ft.Icons.FILE_UPLOAD_ROUNDED, color="#0284C7"),
+                    ft.Text("Importar Artículos", size=16, weight=ft.FontWeight.BOLD)
+                ], spacing=8),
+                ft.IconButton(
+                    icon=ft.Icons.CLOSE_ROUNDED,
+                    icon_color="#64748B",
+                    tooltip="Cerrar",
+                    on_click=lambda x: page.pop_dialog()
+                )
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        # Botones para Plantilla
+                        ft.Row(
+                            controls=[
+                                ft.OutlinedButton(
+                                    content="Ver Plantilla",
+                                    icon=ft.Icons.VISIBILITY_OUTLINED,
+                                    on_click=lambda x: abrir_modal_plantilla(txt_import_input)
+                                ),
+                                ft.OutlinedButton(
+                                    content="Descargar CSV",
+                                    icon=ft.Icons.DOWNLOAD_ROUNDED,
+                                    on_click=descargar_plantilla_directa
+                                )
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            wrap=True
+                        ),
+                        ft.Divider(height=10, color="#E2E8F0"),
+                        # Opción 1: Archivo
+                        ft.ElevatedButton(
+                            content="Seleccionar Archivo (.csv, .svg, .txt)",
+                            icon=ft.Icons.FOLDER_OPEN_ROUNDED,
+                            bgcolor="#F1F5F9",
+                            color="#0F172A",
+                            height=40,
+                            on_click=seleccionar_archivo_click
+                        ),
+                        ft.Text("O pegar contenido directamente:", size=11, color="#64748B", weight=ft.FontWeight.W_500),
+                        # Opción 2: Pegar texto
+                        txt_import_input,
+                        ft.Divider(height=10, color="#E2E8F0"),
+                        # Botón procesar
+                        ft.FilledButton(
+                            content="Procesar Importación",
+                            icon=ft.Icons.CHECK_CIRCLE_ROUNDED,
+                            bgcolor="#059669",
+                            color=ft.Colors.WHITE,
+                            height=44,
+                            on_click=ejecutar_importacion_texto
+                        ),
+                        ft.TextButton(
+                            content="Cancelar",
+                            on_click=lambda x: page.pop_dialog()
+                        )
+                    ],
+                    spacing=10,
+                    scroll=ft.ScrollMode.ADAPTIVE,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH
+                ),
+                width=obtener_ancho_modal(),
+                padding=ft.Padding.only(top=4, bottom=6)
+            ),
+            actions=[]
         )
         page.show_dialog(dlg)
 
@@ -968,6 +1249,12 @@ def main(page: ft.Page):
     # =========================================================================
     # BARRA SUPERIOR DE ACCIONES ADAPTABLE A MÓVIL Y PC
     # =========================================================================
+    btn_importar = ft.FilledTonalButton(
+        content="Importar",
+        icon=ft.Icons.UPLOAD_FILE_ROUNDED,
+        on_click=abrir_modal_importar
+    )
+
     btn_exportar = ft.FilledTonalButton(
         content="Imprimir / PDF",
         icon=ft.Icons.PRINT_ROUNDED,
@@ -992,7 +1279,7 @@ def main(page: ft.Page):
                 spacing=6
             ),
             ft.Row(
-                controls=[btn_exportar, btn_nuevo],
+                controls=[btn_importar, btn_exportar, btn_nuevo],
                 spacing=6,
                 wrap=True
             )
