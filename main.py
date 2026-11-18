@@ -353,6 +353,7 @@ def main(page: ft.Page):
         border_radius=12,
         padding=ft.Padding.symmetric(horizontal=8, vertical=3),
         visible=False,
+        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
         ink=True,
         tooltip="Editar Tasa BCV / Multiplicador 1100",
         on_click=abrir_modal_tasas,
@@ -496,12 +497,34 @@ def main(page: ft.Page):
     actualizar_kpis()
 
     # =========================================================================
-    # BUSCADOR COMPACTO, MÓDULOS ACCESIBLES Y FILTROS
+    # BUSCADOR COMPACTO, ANIMACIONES DE CABECERA Y FILTROS
     # =========================================================================
+    async def _scroll_lista_al_inicio():
+        try:
+            await lista_cards_container.scroll_to(
+                offset=0,
+                duration=200,
+                curve=ft.AnimationCurve.EASE_OUT_CUBIC,
+            )
+        except Exception:
+            pass
+
+    def ir_al_inicio_lista():
+        """Reposiciona la lista suavemente al primer resultado (offset=0)."""
+        estado["ultimo_cambio_compacto"] = time.monotonic()
+        if hasattr(page, "run_task"):
+            try:
+                page.run_task(_scroll_lista_al_inicio)
+            except Exception:
+                pass
+
     def on_busqueda_change(e):
         estado["filtro_texto"] = input_busqueda.value or ""
         estado["pagina_actual"] = 1
+        if estado["filtro_texto"].strip():
+            aplicar_modo_compacto(True, actualizar_ui=False)
         recargar_datos_y_renderizar()
+        ir_al_inicio_lista()
 
     def limpiar_busqueda(e):
         if not input_busqueda.value and not estado["filtro_texto"]:
@@ -510,6 +533,7 @@ def main(page: ft.Page):
         estado["filtro_texto"] = ""
         estado["pagina_actual"] = 1
         recargar_datos_y_renderizar()
+        ir_al_inicio_lista()
 
     input_busqueda = ft.TextField(
         hint_text="Buscar nombre, característica, SKU o ubicación...",
@@ -563,29 +587,33 @@ def main(page: ft.Page):
         on_click=lambda e: abrir_modal_exportacion(e),
     )
 
-    modulos_accesibles_compactos = ft.Row(
-        controls=[btn_quick_tasa, btn_quick_import, btn_quick_export],
-        spacing=2,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        visible=False,
+    modulos_accesibles_compactos = ft.Container(
+        content=ft.Row(
+            controls=[btn_quick_tasa, btn_quick_import, btn_quick_export],
+            spacing=2,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        width=0,
+        opacity=0.0,
+        animate_size=ft.Animation(220, ft.AnimationCurve.EASE_OUT_CUBIC),
+        animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
 
     def aplicar_modo_compacto(compacto: bool, actualizar_ui: bool = True):
-        """Reduce o expande el menú superior para maximizar el espacio de resultados al bajar."""
+        """Reduce o expande suavemente el menú superior para maximizar resultados al bajar."""
         if estado["modo_compacto"] == compacto:
             return
         estado["modo_compacto"] = compacto
         estado["ultimo_cambio_compacto"] = time.monotonic()
 
-        barra_superior.visible = not compacto
-        card_tasa_dolar.visible = not compacto
-        barra_kpis.visible = not compacto
-        modulos_accesibles_compactos.visible = compacto
+        panel_superior_colapsable.height = 0 if compacto else None
+        panel_superior_colapsable.opacity = 0.0 if compacto else 1.0
+        modulos_accesibles_compactos.width = None if compacto else 0
+        modulos_accesibles_compactos.opacity = 1.0 if compacto else 0.0
         badge_resumen_compacto.visible = compacto
 
-        btn_toggle_compacto.icon = (
-            ft.Icons.KEYBOARD_ARROW_DOWN_ROUNDED if compacto else ft.Icons.KEYBOARD_ARROW_UP_ROUNDED
-        )
+        btn_toggle_compacto.rotate = ft.Rotate(math.pi if compacto else 0)
         btn_toggle_compacto.tooltip = (
             "Expandir menú superior" if compacto else "Compactar menú superior"
         )
@@ -602,6 +630,8 @@ def main(page: ft.Page):
         width=32,
         height=32,
         padding=0,
+        rotate=ft.Rotate(0),
+        animate_rotation=ft.Animation(260, ft.AnimationCurve.EASE_OUT_CUBIC),
         tooltip="Compactar menú superior",
         on_click=toggle_modo_compacto_manual,
     )
@@ -632,8 +662,10 @@ def main(page: ft.Page):
         estado["categoria_filtro"] = categoria
         estado["solo_stock"] = (categoria == "stock")
         estado["pagina_actual"] = 1
+        barra_navegacion.selected_index = 1 if categoria == "stock" else 0
         actualizar_estilo_chips()
         recargar_datos_y_renderizar()
+        ir_al_inicio_lista()
 
     btn_chip_todos = ft.Container(
         content=ft.Text("Todos (A-Z)", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
@@ -641,6 +673,7 @@ def main(page: ft.Page):
         border=ft.Border.all(1, "#CBD5E1"),
         border_radius=18,
         padding=ft.Padding.symmetric(horizontal=10, vertical=4),
+        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
         on_click=lambda e: cambiar_filtro_categoria("todos"),
         ink=True,
     )
@@ -651,6 +684,7 @@ def main(page: ft.Page):
         border=ft.Border.all(1, "#CBD5E1"),
         border_radius=18,
         padding=ft.Padding.symmetric(horizontal=10, vertical=4),
+        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
         on_click=lambda e: cambiar_filtro_categoria("stock"),
         ink=True,
     )
@@ -661,6 +695,7 @@ def main(page: ft.Page):
         border=ft.Border.all(1, "#CBD5E1"),
         border_radius=18,
         padding=ft.Padding.symmetric(horizontal=10, vertical=4),
+        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
         on_click=lambda e: cambiar_filtro_categoria("agotados"),
         ink=True,
     )
@@ -690,11 +725,13 @@ def main(page: ft.Page):
         if estado["pagina_actual"] > 1:
             estado["pagina_actual"] -= 1
             renderizar_pagina_actual()
+            ir_al_inicio_lista()
 
     def ir_pagina_siguiente(e):
         if estado["pagina_actual"] < estado["total_paginas"]:
             estado["pagina_actual"] += 1
             renderizar_pagina_actual()
+            ir_al_inicio_lista()
 
     btn_pag_ant = ft.IconButton(
         icon=ft.Icons.CHEVRON_LEFT_ROUNDED,
@@ -724,7 +761,6 @@ def main(page: ft.Page):
         border=ft.Border.all(1, "#E2E8F0"),
         border_radius=10,
         padding=ft.Padding.symmetric(horizontal=8, vertical=0),
-        margin=ft.Margin.only(right=68),
     )
 
     # =========================================================================
@@ -734,16 +770,16 @@ def main(page: ft.Page):
         pixels = getattr(e, "pixels", 0.0) or 0.0
         ahora = time.monotonic()
         if pixels > 45 and not estado["modo_compacto"]:
-            if ahora - estado["ultimo_cambio_compacto"] >= 0.3:
+            if ahora - estado["ultimo_cambio_compacto"] >= 0.35:
                 aplicar_modo_compacto(True)
-        elif pixels <= 5 and estado["modo_compacto"]:
+        elif pixels <= 5 and estado["modo_compacto"] and not estado["filtro_texto"].strip():
             if ahora - estado["ultimo_cambio_compacto"] >= 0.45:
                 aplicar_modo_compacto(False)
 
     lista_cards_container = ft.ListView(
         controls=[],
         spacing=8,
-        padding=ft.Padding.only(bottom=72),
+        padding=ft.Padding.only(bottom=12),
         scroll_interval=50,
         on_scroll=on_lista_scroll,
         expand=True,
@@ -870,7 +906,7 @@ def main(page: ft.Page):
             "txt_cant": txt_cant_rapida,
         }
 
-        origen_lbl = f"BASE ({precios['origen_base'].upper()})" if precios["tiene_precio"] else "PRECIO BASE"
+        origen_lbl = "PRECIO VENTA ($)"
         color_bcv = p_col["bcv_box_txt"] if precios["tiene_precio"] else p_col["muted"]
         color_mult = p_col["mult_box_txt"] if precios["tiene_precio"] else p_col["muted"]
 
@@ -1004,6 +1040,7 @@ def main(page: ft.Page):
             border=ft.Border.all(1, p_col["border"]),
             border_radius=12,
             padding=12,
+            animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
         )
 
     def crear_encabezado_seccion(titulo: str, es_stock: bool) -> ft.Container:
@@ -1106,8 +1143,7 @@ def main(page: ft.Page):
         in_cantidad = ft.TextField(label="Stock Inicial", value="0", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         in_nombre = ft.TextField(label="Nombre del Artículo *", border_radius=8, content_padding=10, autofocus=True, expand=True)
         in_desc_corta = ft.TextField(label="Descripción / Características (Opcional)", hint_text="Se genera automática si se deja vacío", border_radius=8, content_padding=10, expand=True)
-        in_detal = ft.TextField(label="Precio Detal ($)", hint_text="10.00", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
-        in_desc = ft.TextField(label="Precio Lista/Desc. ($)", hint_text="8.00", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
+        in_precio_usd = ft.TextField(label="Precio Venta ($)", hint_text="10.00", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         in_costo = ft.TextField(label="Costo Base ($)", hint_text="4.50", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         in_ubicacion = ft.TextField(label="Ubicación / Nota", hint_text="Depósito, BRIAN...", border_radius=8, content_padding=10, expand=True)
 
@@ -1122,14 +1158,15 @@ def main(page: ft.Page):
                 return None
 
         def actualizar_preview_nuevo(ev=None):
+            precio_val = parse_float(in_precio_usd.value)
             sim_prod = {
-                "precio_detal_usd": parse_float(in_detal.value),
-                "precio_descuento_usd": parse_float(in_desc.value),
+                "precio_detal_usd": precio_val,
+                "precio_descuento_usd": precio_val,
             }
             c = database.calcular_precios_producto(sim_prod, estado["tasa_bcv"], estado["tasa_reposicion"])
             if c["tiene_precio"]:
                 txt_preview_calc.value = (
-                    f"Base ({c['origen_base']}): {c['precio_base_str']} | "
+                    f"Precio Venta: {c['precio_base_str']} | "
                     f"Mult. ({estado['tasa_reposicion']:,.0f}): {c['monto_bs_reposicion_str']}\n"
                     f"Ajustado BCV: {c['precio_venta_bcv_usd_str']} | BCV Directo: {c['monto_bs_bcv_directo_str']}"
                 )
@@ -1138,8 +1175,7 @@ def main(page: ft.Page):
             if ev is not None:
                 page.update()
 
-        in_detal.on_change = actualizar_preview_nuevo
-        in_desc.on_change = actualizar_preview_nuevo
+        in_precio_usd.on_change = actualizar_preview_nuevo
 
         def cerrar_dialogo(ev):
             page.pop_dialog()
@@ -1162,12 +1198,13 @@ def main(page: ft.Page):
                 notificar("La cantidad debe ser un número entero", es_error=True)
                 return
 
+            precio_venta = parse_float(in_precio_usd.value)
             exito = database.agregar_producto(
                 sku=sku,
                 nombre=nombre,
                 cantidad=cantidad,
-                precio_detal=parse_float(in_detal.value),
-                precio_descuento=parse_float(in_desc.value),
+                precio_detal=precio_venta,
+                precio_descuento=precio_venta,
                 costo=parse_float(in_costo.value),
                 ubicacion=(in_ubicacion.value or "").strip() or None,
                 descripcion=(in_desc_corta.value or "").strip() or None,
@@ -1177,6 +1214,7 @@ def main(page: ft.Page):
                 page.pop_dialog()
                 actualizar_kpis()
                 recargar_datos_y_renderizar()
+                ir_al_inicio_lista()
                 notificar(f"Producto '{nombre}' registrado con éxito.")
             else:
                 notificar(f"Error: Ya existe un producto activo con el SKU '{sku}'", es_error=True)
@@ -1195,7 +1233,7 @@ def main(page: ft.Page):
                         ft.Row([in_sku, in_cantidad], spacing=8),
                         ft.Row([in_nombre], spacing=8),
                         ft.Row([in_desc_corta], spacing=8),
-                        ft.Row([in_detal, in_desc], spacing=8),
+                        ft.Row([in_precio_usd, in_costo], spacing=8),
                         ft.Container(
                             content=txt_preview_calc,
                             bgcolor=p_col["repo_box_bg"],
@@ -1203,7 +1241,7 @@ def main(page: ft.Page):
                             border_radius=8,
                             padding=8,
                         ),
-                        ft.Row([in_costo, in_ubicacion], spacing=8),
+                        ft.Row([in_ubicacion], spacing=8),
                         ft.Divider(height=12, color=p_col["border"]),
                         ft.FilledButton(
                             content="Guardar Artículo",
@@ -1235,6 +1273,12 @@ def main(page: ft.Page):
             return
         p_col = pal()
 
+        precio_inicial = (
+            p["precio_descuento_usd"]
+            if (p.get("precio_descuento_usd") is not None and float(p["precio_descuento_usd"]) > 0)
+            else p.get("precio_detal_usd")
+        )
+
         ed_sku = ft.TextField(label="SKU / Código", value=p["sku"], border_radius=8, content_padding=10, expand=True)
         ed_cantidad = ft.TextField(label="Stock Actual", value=str(p["cantidad"]), keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         ed_nombre = ft.TextField(label="Nombre del Producto", value=p["nombre"], border_radius=8, content_padding=10, expand=True)
@@ -1246,8 +1290,14 @@ def main(page: ft.Page):
             content_padding=10,
             expand=True,
         )
-        ed_detal = ft.TextField(label="Precio Detal ($)", value=str(p["precio_detal_usd"]) if p["precio_detal_usd"] is not None else "", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
-        ed_desc = ft.TextField(label="Precio Lista/Desc. ($)", value=str(p["precio_descuento_usd"]) if p["precio_descuento_usd"] is not None else "", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
+        ed_precio_usd = ft.TextField(
+            label="Precio Venta ($)",
+            value=str(precio_inicial) if precio_inicial is not None else "",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            border_radius=8,
+            content_padding=10,
+            expand=True,
+        )
         ed_costo = ft.TextField(label="Costo Base ($)", value=str(p["costo_usd"]) if p["costo_usd"] is not None else "", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         ed_ubicacion = ft.TextField(label="Ubicación / Nota", value=p["ubicacion_nota"] or "", border_radius=8, content_padding=10, expand=True)
 
@@ -1262,14 +1312,15 @@ def main(page: ft.Page):
                 return None
 
         def actualizar_preview_edicion(ev=None):
+            precio_val = parse_float(ed_precio_usd.value)
             sim_prod = {
-                "precio_detal_usd": parse_float(ed_detal.value),
-                "precio_descuento_usd": parse_float(ed_desc.value),
+                "precio_detal_usd": precio_val,
+                "precio_descuento_usd": precio_val,
             }
             c = database.calcular_precios_producto(sim_prod, estado["tasa_bcv"], estado["tasa_reposicion"])
             if c["tiene_precio"]:
                 lbl_info_arbitraje.value = (
-                    f"Base ({c['origen_base']}): {c['precio_base_str']} | "
+                    f"Precio Venta: {c['precio_base_str']} | "
                     f"Mult. ({estado['tasa_reposicion']:,.0f}): {c['monto_bs_reposicion_str']}\n"
                     f"Ajustado BCV: {c['precio_venta_bcv_usd_str']} | BCV Directo: {c['monto_bs_bcv_directo_str']}"
                 )
@@ -1279,8 +1330,7 @@ def main(page: ft.Page):
                 page.update()
 
         actualizar_preview_edicion()
-        ed_detal.on_change = actualizar_preview_edicion
-        ed_desc.on_change = actualizar_preview_edicion
+        ed_precio_usd.on_change = actualizar_preview_edicion
 
         def cerrar_dialogo(ev):
             page.pop_dialog()
@@ -1297,13 +1347,14 @@ def main(page: ft.Page):
                 notificar("La cantidad debe ser un número entero", es_error=True)
                 return
 
+            precio_venta = parse_float(ed_precio_usd.value)
             exito = database.actualizar_producto(
                 producto_id=producto_id,
                 sku=(ed_sku.value or "").strip(),
                 nombre=(ed_nombre.value or "").strip(),
                 cantidad=nueva_cant,
-                precio_detal=parse_float(ed_detal.value),
-                precio_descuento=parse_float(ed_desc.value),
+                precio_detal=precio_venta,
+                precio_descuento=precio_venta,
                 costo=parse_float(ed_costo.value),
                 ubicacion=(ed_ubicacion.value or "").strip() or None,
                 descripcion=(ed_desc_corta.value or "").strip() or None,
@@ -1335,7 +1386,7 @@ def main(page: ft.Page):
                         ft.Row([ed_sku, ed_cantidad], spacing=8),
                         ft.Row([ed_nombre], spacing=8),
                         ft.Row([ed_desc_corta], spacing=8),
-                        ft.Row([ed_detal, ed_desc], spacing=8),
+                        ft.Row([ed_precio_usd, ed_costo], spacing=8),
                         ft.Container(
                             content=lbl_info_arbitraje,
                             bgcolor=p_col["repo_box_bg"],
@@ -1343,7 +1394,7 @@ def main(page: ft.Page):
                             border_radius=8,
                             padding=8,
                         ),
-                        ft.Row([ed_costo, ed_ubicacion], spacing=8),
+                        ft.Row([ed_ubicacion], spacing=8),
                         ft.Divider(height=12, color=p_col["border"]),
                         ft.FilledButton(
                             content="Guardar Cambios",
@@ -1762,6 +1813,8 @@ def main(page: ft.Page):
         barra_paginacion.border = ft.Border.all(1, p_col["border"])
         input_busqueda.bgcolor = p_col["card"]
         input_busqueda.border_color = p_col["border"]
+        barra_navegacion.bgcolor = p_col["card"]
+        barra_navegacion.indicator_color = "#0C4A6E" if estado["modo_oscuro"] else "#E0F2FE"
 
         for cont in kpi_containers:
             cont.bgcolor = p_col["card"]
@@ -1791,7 +1844,7 @@ def main(page: ft.Page):
     )
 
     # =========================================================================
-    # BARRA SUPERIOR DE ACCIONES Y FLOATING ACTION BUTTON (+)
+    # BARRA SUPERIOR DE ACCIONES Y PANEL COLAPSABLE ANIMADO
     # =========================================================================
     btn_editar_tasas = ft.FilledTonalButton(
         content="Tasa / 1100",
@@ -1843,23 +1896,84 @@ def main(page: ft.Page):
         wrap=True,
     )
 
-    # Botón flotante (+) Material 3 nativo para agregar artículos con un toque en celular
-    page.floating_action_button = ft.FloatingActionButton(
-        icon=ft.Icons.ADD_ROUNDED,
-        bgcolor="#0284C7",
-        foreground_color=ft.Colors.WHITE,
-        tooltip="Agregar nuevo artículo",
-        on_click=abrir_modal_nuevo_producto,
+    panel_superior_colapsable = ft.Container(
+        content=ft.Column(
+            controls=[barra_superior, card_tasa_dolar, barra_kpis],
+            spacing=6,
+            tight=True,
+        ),
+        opacity=1.0,
+        animate_size=ft.Animation(280, ft.AnimationCurve.EASE_OUT_CUBIC),
+        animate_opacity=ft.Animation(220, ft.AnimationCurve.EASE_IN_OUT),
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
+
+    # =========================================================================
+    # BARRA DE NAVEGACIÓN INFERIOR (NAVBAR MATERIAL 3)
+    # =========================================================================
+    def on_nav_change(e):
+        idx = getattr(e.control, "selected_index", 0)
+        if idx == 0:
+            if not (estado["filtro_texto"] or "").strip():
+                aplicar_modo_compacto(False, actualizar_ui=False)
+            cambiar_filtro_categoria("todos")
+        elif idx == 1:
+            cambiar_filtro_categoria("stock")
+        elif idx == 2:
+            barra_navegacion.selected_index = 1 if estado["categoria_filtro"] == "stock" else 0
+            page.update()
+            abrir_modal_nuevo_producto()
+        elif idx == 3:
+            barra_navegacion.selected_index = 1 if estado["categoria_filtro"] == "stock" else 0
+            page.update()
+            abrir_modal_tasas()
+        elif idx == 4:
+            barra_navegacion.selected_index = 1 if estado["categoria_filtro"] == "stock" else 0
+            page.update()
+            abrir_modal_exportacion()
+
+    barra_navegacion = ft.NavigationBar(
+        selected_index=0,
+        bgcolor=ft.Colors.WHITE,
+        indicator_color="#E0F2FE",
+        height=62,
+        animation_duration=300,
+        destinations=[
+            ft.NavigationBarDestination(
+                icon=ft.Icons.INVENTORY_2_OUTLINED,
+                selected_icon=ft.Icons.INVENTORY_2_ROUNDED,
+                label="Inventario",
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
+                selected_icon=ft.Icons.CHECK_CIRCLE_ROUNDED,
+                label="Con Stock",
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.ADD_CIRCLE_OUTLINE_ROUNDED,
+                selected_icon=ft.Icons.ADD_CIRCLE_ROUNDED,
+                label="Nuevo",
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.CURRENCY_EXCHANGE_ROUNDED,
+                label="Tasa / 1100",
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.PRINT_OUTLINED,
+                selected_icon=ft.Icons.PRINT_ROUNDED,
+                label="Imprimir",
+            ),
+        ],
+        on_change=on_nav_change,
+    )
+    page.navigation_bar = barra_navegacion
 
     # =========================================================================
     # ENSAMBLAJE DE LA VISTA PRINCIPAL CON SAFEAREA (EVITA SOLAPAMIENTO CON STATUS BAR)
     # =========================================================================
     contenido_principal = ft.Column(
         controls=[
-            barra_superior,
-            card_tasa_dolar,
-            barra_kpis,
+            panel_superior_colapsable,
             fila_busqueda,
             fila_filtros,
             lista_cards_container,
