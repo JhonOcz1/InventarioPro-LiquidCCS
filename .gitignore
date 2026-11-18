@@ -5,7 +5,8 @@ __pycache__/
 exportaciones/
 build/
 .flet/
-inventario.db
-inventario.db-wal
-inventario.db-shm
+/inventario.db
+/inventario.db-wal
+/inventario.db-shm
+!assets/inventario.db
 *.apk

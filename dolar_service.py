@@ -75,9 +75,11 @@ def formatear_precios(monto_usd: float | None, tasa_bcv: float) -> Tuple[str, st
     if monto_usd is None or monto_usd == 0:
         return ("-", "-")
 
-    str_usd = f"${monto_usd:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    num_usd = f"{monto_usd:,.2f}"
+    str_usd = f"${num_usd}"
     monto_bs = monto_usd * tasa_bcv
-    str_bs = f"Bs. {monto_bs:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    num_bs = f"{monto_bs:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    str_bs = f"Bs. {num_bs}"
     return (str_usd, str_bs)
 
 
