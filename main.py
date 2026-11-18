@@ -8,6 +8,7 @@ descripción corta automática de características y persistencia Android segura
 import os
 import sys
 import math
+import time
 import threading
 import webbrowser
 import flet as ft
@@ -33,8 +34,8 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.theme = ft.Theme(color_scheme_seed="#0284C7", use_material3=True)
     page.bgcolor = "#F8FAFC"
-    page.padding = 12
-    page.spacing = 10
+    page.padding = ft.Padding.symmetric(horizontal=10, vertical=6)
+    page.spacing = 6
 
     if hasattr(page, "window") and page.window is not None:
         page.window.width = 1100
@@ -45,6 +46,8 @@ def main(page: ft.Page):
     tasas_iniciales = database.obtener_tasas()
     estado = {
         "modo_oscuro": False,
+        "modo_compacto": False,
+        "ultimo_cambio_compacto": 0.0,
         "filtro_texto": "",
         "solo_stock": False,
         "categoria_filtro": "todos",  # 'todos', 'stock', 'agotados'
@@ -145,19 +148,19 @@ def main(page: ft.Page):
     # =========================================================================
     # PANEL DE TASAS Y MULTIPLICADOR GLOBAL (BCV + BASE 1100 EDITABLE)
     # =========================================================================
-    txt_titulo_app = ft.Text("Inventario Pro", size=18, weight=ft.FontWeight.BOLD, color="#0F172A")
-    icono_app = ft.Icon(ft.Icons.INVENTORY_ROUNDED, color="#0284C7", size=24)
+    txt_titulo_app = ft.Text("Inventario Pro", size=17, weight=ft.FontWeight.BOLD, color="#0F172A")
+    icono_app = ft.Icon(ft.Icons.INVENTORY_ROUNDED, color="#0284C7", size=22)
 
-    txt_tasa_bcv = ft.Text("", size=15, weight=ft.FontWeight.BOLD, color="#0F172A")
-    txt_tasa_repo = ft.Text("", size=15, weight=ft.FontWeight.BOLD, color="#B45309")
-    lbl_sub_bcv = ft.Text("Al subir el dólar BCV sube el precio en Bs.", size=11, color="#64748B")
-    lbl_sub_repo = ft.Text("Multiplicador global en Bs. (ej. 1100)", size=11, color="#64748B")
-    lbl_fecha_tasa = ft.Text("", size=11, color="#64748B")
+    lbl_titulo_bcv = ft.Text("Tasa Dólar BCV", size=10, color="#64748B", weight=ft.FontWeight.W_500)
+    lbl_titulo_mult = ft.Text("Multiplicador Global", size=10, color="#64748B", weight=ft.FontWeight.W_500)
+    txt_tasa_bcv = ft.Text("", size=14, weight=ft.FontWeight.BOLD, color="#0F172A")
+    txt_tasa_repo = ft.Text("", size=14, weight=ft.FontWeight.BOLD, color="#B45309")
+    lbl_fecha_tasa = ft.Text("", size=10, color="#64748B")
     badge_estado_tasas = ft.Container(
-        content=ft.Text("SQLITE", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+        content=ft.Text("SQLITE", size=9, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
         bgcolor="#0284C7",
-        padding=ft.Padding.symmetric(horizontal=8, vertical=2),
-        border_radius=12,
+        padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+        border_radius=10,
     )
 
     def refrescar_tasa_api(e=None):
@@ -332,16 +335,27 @@ def main(page: ft.Page):
         )
         page.show_dialog(dlg)
 
-    btn_editar_tasas = ft.FilledTonalButton(
-        content="Editar 1100 / BCV",
-        icon=ft.Icons.EDIT_ROUNDED,
-        on_click=abrir_modal_tasas,
-    )
     btn_sync_api = ft.IconButton(
-        icon=ft.Icons.SYNC_ROUNDED,
+        icon=ft.Icons.REFRESH_ROUNDED,
         icon_color="#0284C7",
+        icon_size=18,
+        width=28,
+        height=28,
+        padding=0,
         tooltip="Actualizar tasa BCV desde DolarApi (internet)",
         on_click=refrescar_tasa_api,
+    )
+
+    badge_resumen_compacto = ft.Container(
+        content=ft.Text("", size=10, weight=ft.FontWeight.BOLD, color="#92400E"),
+        bgcolor="#FEF3C7",
+        border=ft.Border.all(1, "#F59E0B"),
+        border_radius=12,
+        padding=ft.Padding.symmetric(horizontal=8, vertical=3),
+        visible=False,
+        ink=True,
+        tooltip="Editar Tasa BCV / Multiplicador 1100",
+        on_click=abrir_modal_tasas,
     )
 
     def actualizar_panel_tasas():
@@ -350,14 +364,19 @@ def main(page: ft.Page):
         rep_s = database.formatear_bs(estado["tasa_reposicion"])
         factor = estado["tasa_reposicion"] / estado["tasa_bcv"] if estado["tasa_bcv"] > 0 else 1.0
 
-        txt_tasa_bcv.value = f"Tasa Dólar BCV: {bcv_s}"
+        lbl_titulo_bcv.color = p_col["muted"]
+        lbl_titulo_mult.color = p_col["muted"]
+        txt_tasa_bcv.value = bcv_s
         txt_tasa_bcv.color = p_col["text"]
-        txt_tasa_repo.value = f"Multiplicador Global: {rep_s}"
+        txt_tasa_repo.value = rep_s
         txt_tasa_repo.color = p_col["mult_box_txt"]
-        lbl_sub_bcv.color = p_col["muted"]
-        lbl_sub_repo.color = p_col["muted"]
         lbl_fecha_tasa.value = f"{estado['tasa_mensaje']} • Relación: ×{factor:.4f}"
         lbl_fecha_tasa.color = p_col["muted"]
+
+        badge_resumen_compacto.bgcolor = p_col["mult_box_bg"]
+        badge_resumen_compacto.border = ft.Border.all(1, p_col["mult_box_border"])
+        badge_resumen_compacto.content.color = p_col["mult_box_txt"]
+        badge_resumen_compacto.content.value = f"BCV {estado['tasa_bcv']:,.2f} | ×{estado['tasa_reposicion']:,.0f}"
 
         if estado["tasa_online"]:
             badge_estado_tasas.bgcolor = "#10B981"
@@ -369,53 +388,68 @@ def main(page: ft.Page):
     actualizar_panel_tasas()
 
     card_tasa_dolar = ft.Container(
-        content=ft.Row(
+        content=ft.Column(
             controls=[
+                # Fila superior: título + estado a la izquierda, botón recarga en la esquina superior derecha
                 ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.CURRENCY_EXCHANGE_ROUNDED, color="#0284C7", size=26),
-                        ft.Column(
+                        ft.Row(
                             controls=[
-                                ft.Row(
-                                    controls=[
-                                        ft.Text("TASAS Y MULTIPLICADOR GLOBAL", size=11, weight=ft.FontWeight.BOLD, color="#0284C7"),
-                                        badge_estado_tasas,
-                                    ],
-                                    spacing=6,
+                                ft.Icon(ft.Icons.CURRENCY_EXCHANGE_ROUNDED, color="#0284C7", size=18),
+                                ft.Text(
+                                    "TASAS DEL DÓLAR Y MULTIPLICADOR",
+                                    size=11,
+                                    weight=ft.FontWeight.BOLD,
+                                    color="#0284C7",
+                                    expand_loose=True,
+                                    max_lines=1,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
                                 ),
-                                ft.Row(controls=[txt_tasa_bcv, txt_tasa_repo], spacing=14, wrap=True),
-                                lbl_fecha_tasa,
+                                badge_estado_tasas,
                             ],
+                            spacing=6,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            expand=True,
+                        ),
+                        btn_sync_api,
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                # Cuerpo: valores bien separados y cómodos de leer sin solapamientos
+                ft.ResponsiveRow(
+                    controls=[
+                        ft.Column(
+                            controls=[lbl_titulo_bcv, txt_tasa_bcv],
                             spacing=1,
-                            alignment=ft.MainAxisAlignment.CENTER,
+                            col={"xs": 6, "sm": 6},
+                        ),
+                        ft.Column(
+                            controls=[lbl_titulo_mult, txt_tasa_repo],
+                            spacing=1,
+                            col={"xs": 6, "sm": 6},
                         ),
                     ],
-                    spacing=10,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    expand=True,
+                    spacing=8,
+                    run_spacing=4,
                 ),
-                ft.Row(
-                    controls=[btn_editar_tasas, btn_sync_api],
-                    spacing=4,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
+                lbl_fecha_tasa,
             ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=4,
         ),
         bgcolor=ft.Colors.WHITE,
         border=ft.Border.all(1, "#E2E8F0"),
         border_radius=12,
-        padding=10,
+        padding=ft.Padding.symmetric(horizontal=12, vertical=8),
     )
 
     # =========================================================================
     # MÉTRICAS KPI DEL INVENTARIO
     # =========================================================================
-    txt_kpi_total_prods = ft.Text("0", size=15, weight=ft.FontWeight.BOLD, color="#0F172A")
-    txt_kpi_total_stock = ft.Text("0", size=15, weight=ft.FontWeight.BOLD, color="#059669")
-    txt_kpi_con_stock = ft.Text("0", size=15, weight=ft.FontWeight.BOLD, color="#0284C7")
-    txt_kpi_valor_bcv = ft.Text("$0.00", size=15, weight=ft.FontWeight.BOLD, color="#7C3AED")
+    txt_kpi_total_prods = ft.Text("0", size=14, weight=ft.FontWeight.BOLD, color="#0F172A")
+    txt_kpi_total_stock = ft.Text("0", size=14, weight=ft.FontWeight.BOLD, color="#059669")
+    txt_kpi_con_stock = ft.Text("0", size=14, weight=ft.FontWeight.BOLD, color="#0284C7")
+    txt_kpi_valor_bcv = ft.Text("$0.00", size=14, weight=ft.FontWeight.BOLD, color="#7C3AED")
 
     kpi_containers = []
     kpi_titulos = []
@@ -426,16 +460,16 @@ def main(page: ft.Page):
         cont = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Icon(icon_name, color=color_accent, size=21),
+                    ft.Icon(icon_name, color=color_accent, size=19),
                     ft.Column(controls=[lbl_t, txt_control], spacing=0),
                 ],
-                spacing=8,
+                spacing=6,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             bgcolor=ft.Colors.WHITE,
             border=ft.Border.all(1, "#E2E8F0"),
             border_radius=10,
-            padding=8,
+            padding=6,
             col={"xs": 6, "sm": 6, "md": 3},
         )
         kpi_containers.append(cont)
@@ -448,8 +482,8 @@ def main(page: ft.Page):
             kpi_box("Con Stock (>0)", txt_kpi_con_stock, ft.Icons.CHECK_CIRCLE_OUTLINE, "#0284C7"),
             kpi_box("Valor Ajust. BCV", txt_kpi_valor_bcv, ft.Icons.PAYMENTS_OUTLINED, "#7C3AED"),
         ],
-        spacing=8,
-        run_spacing=8,
+        spacing=6,
+        run_spacing=6,
     )
 
     def actualizar_kpis():
@@ -462,7 +496,7 @@ def main(page: ft.Page):
     actualizar_kpis()
 
     # =========================================================================
-    # BUSCADOR FULL-WIDTH Y FILTROS ("Solo con stock (> 0)" + CHIPS)
+    # BUSCADOR COMPACTO, MÓDULOS ACCESIBLES Y FILTROS
     # =========================================================================
     def on_busqueda_change(e):
         estado["filtro_texto"] = input_busqueda.value or ""
@@ -478,21 +512,106 @@ def main(page: ft.Page):
         recargar_datos_y_renderizar()
 
     input_busqueda = ft.TextField(
-        hint_text="Buscar por nombre, característica, SKU o ubicación (ej. BRIAN, HDMI, ROUTER)...",
+        hint_text="Buscar nombre, característica, SKU o ubicación...",
         prefix_icon=ft.Icons.SEARCH,
-        suffix=ft.IconButton(ft.Icons.CLEAR, on_click=limpiar_busqueda, tooltip="Limpiar búsqueda"),
+        suffix=ft.IconButton(
+            ft.Icons.CLEAR,
+            icon_size=16,
+            padding=0,
+            on_click=limpiar_busqueda,
+            tooltip="Limpiar búsqueda",
+        ),
         bgcolor=ft.Colors.WHITE,
         border_color="#94A3B8",
         focused_border_color="#0284C7",
         border_radius=10,
-        content_padding=10,
+        content_padding=ft.Padding.symmetric(horizontal=8, vertical=6),
         text_size=13,
+        height=42,
         expand=True,
         on_change=on_busqueda_change,
     )
 
-    # Row SIN wrap=True para que expand=True estire la barra de búsqueda al 100% sin errores de layout
-    fila_busqueda = ft.Row(controls=[input_busqueda])
+    btn_quick_tasa = ft.IconButton(
+        icon=ft.Icons.CURRENCY_EXCHANGE_ROUNDED,
+        icon_color="#B45309",
+        icon_size=18,
+        width=32,
+        height=32,
+        padding=0,
+        tooltip="Editar Tasa BCV / 1100",
+        on_click=lambda e: abrir_modal_tasas(e),
+    )
+    btn_quick_import = ft.IconButton(
+        icon=ft.Icons.UPLOAD_FILE_ROUNDED,
+        icon_color="#0284C7",
+        icon_size=18,
+        width=32,
+        height=32,
+        padding=0,
+        tooltip="Importar artículos",
+        on_click=lambda e: abrir_modal_importar(e),
+    )
+    btn_quick_export = ft.IconButton(
+        icon=ft.Icons.PRINT_ROUNDED,
+        icon_color="#334155",
+        icon_size=18,
+        width=32,
+        height=32,
+        padding=0,
+        tooltip="Exportar / Imprimir PDF",
+        on_click=lambda e: abrir_modal_exportacion(e),
+    )
+
+    modulos_accesibles_compactos = ft.Row(
+        controls=[btn_quick_tasa, btn_quick_import, btn_quick_export],
+        spacing=2,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        visible=False,
+    )
+
+    def aplicar_modo_compacto(compacto: bool, actualizar_ui: bool = True):
+        """Reduce o expande el menú superior para maximizar el espacio de resultados al bajar."""
+        if estado["modo_compacto"] == compacto:
+            return
+        estado["modo_compacto"] = compacto
+        estado["ultimo_cambio_compacto"] = time.monotonic()
+
+        barra_superior.visible = not compacto
+        card_tasa_dolar.visible = not compacto
+        barra_kpis.visible = not compacto
+        modulos_accesibles_compactos.visible = compacto
+        badge_resumen_compacto.visible = compacto
+
+        btn_toggle_compacto.icon = (
+            ft.Icons.KEYBOARD_ARROW_DOWN_ROUNDED if compacto else ft.Icons.KEYBOARD_ARROW_UP_ROUNDED
+        )
+        btn_toggle_compacto.tooltip = (
+            "Expandir menú superior" if compacto else "Compactar menú superior"
+        )
+        if actualizar_ui:
+            page.update()
+
+    def toggle_modo_compacto_manual(e=None):
+        aplicar_modo_compacto(not estado["modo_compacto"], actualizar_ui=True)
+
+    btn_toggle_compacto = ft.IconButton(
+        icon=ft.Icons.KEYBOARD_ARROW_UP_ROUNDED,
+        icon_color="#475569",
+        icon_size=20,
+        width=32,
+        height=32,
+        padding=0,
+        tooltip="Compactar menú superior",
+        on_click=toggle_modo_compacto_manual,
+    )
+
+    # Row SIN wrap=True para que expand=True estire la barra de búsqueda sin errores de layout
+    fila_busqueda = ft.Row(
+        controls=[input_busqueda, modulos_accesibles_compactos, btn_toggle_compacto],
+        spacing=4,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
 
     def actualizar_estilo_chips():
         p_col = pal()
@@ -512,64 +631,55 @@ def main(page: ft.Page):
     def cambiar_filtro_categoria(categoria: str):
         estado["categoria_filtro"] = categoria
         estado["solo_stock"] = (categoria == "stock")
-        switch_solo_stock.value = estado["solo_stock"]
         estado["pagina_actual"] = 1
         actualizar_estilo_chips()
         recargar_datos_y_renderizar()
-
-    def on_switch_stock_change(e):
-        activar = bool(switch_solo_stock.value)
-        estado["solo_stock"] = activar
-        estado["categoria_filtro"] = "stock" if activar else "todos"
-        estado["pagina_actual"] = 1
-        actualizar_estilo_chips()
-        recargar_datos_y_renderizar()
-
-    switch_solo_stock = ft.Switch(
-        label="Solo con stock (> 0)",
-        value=False,
-        active_color="#059669",
-        on_change=on_switch_stock_change,
-    )
 
     btn_chip_todos = ft.Container(
-        content=ft.Text("Todos (A-Z)", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+        content=ft.Text("Todos (A-Z)", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
         bgcolor="#0F172A",
         border=ft.Border.all(1, "#CBD5E1"),
-        border_radius=20,
-        padding=ft.Padding.symmetric(horizontal=12, vertical=5),
+        border_radius=18,
+        padding=ft.Padding.symmetric(horizontal=10, vertical=4),
         on_click=lambda e: cambiar_filtro_categoria("todos"),
         ink=True,
     )
 
     btn_chip_stock = ft.Container(
-        content=ft.Text("Con Stock", size=12, weight=ft.FontWeight.BOLD, color="#334155"),
+        content=ft.Text("Con Stock (>0)", size=11, weight=ft.FontWeight.BOLD, color="#334155"),
         bgcolor=ft.Colors.WHITE,
         border=ft.Border.all(1, "#CBD5E1"),
-        border_radius=20,
-        padding=ft.Padding.symmetric(horizontal=12, vertical=5),
+        border_radius=18,
+        padding=ft.Padding.symmetric(horizontal=10, vertical=4),
         on_click=lambda e: cambiar_filtro_categoria("stock"),
         ink=True,
     )
 
     btn_chip_agotados = ft.Container(
-        content=ft.Text("Agotados", size=12, weight=ft.FontWeight.BOLD, color="#334155"),
+        content=ft.Text("Agotados", size=11, weight=ft.FontWeight.BOLD, color="#334155"),
         bgcolor=ft.Colors.WHITE,
         border=ft.Border.all(1, "#CBD5E1"),
-        border_radius=20,
-        padding=ft.Padding.symmetric(horizontal=12, vertical=5),
+        border_radius=18,
+        padding=ft.Padding.symmetric(horizontal=10, vertical=4),
         on_click=lambda e: cambiar_filtro_categoria("agotados"),
         ink=True,
     )
 
+    lbl_contador_resultados = ft.Text("", size=11, color="#475569", weight=ft.FontWeight.W_600)
+
     fila_filtros = ft.Row(
-        controls=[btn_chip_todos, btn_chip_stock, btn_chip_agotados, switch_solo_stock],
-        spacing=8,
+        controls=[
+            btn_chip_todos,
+            btn_chip_stock,
+            btn_chip_agotados,
+            badge_resumen_compacto,
+            lbl_contador_resultados,
+        ],
+        spacing=6,
+        run_spacing=4,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
         wrap=True,
     )
-
-    lbl_contador_resultados = ft.Text("", size=12, color="#475569", weight=ft.FontWeight.W_600)
 
     # =========================================================================
     # CONTROLES DE PAGINACIÓN RÁPIDA
@@ -589,12 +699,16 @@ def main(page: ft.Page):
     btn_pag_ant = ft.IconButton(
         icon=ft.Icons.CHEVRON_LEFT_ROUNDED,
         icon_color="#0F172A",
+        icon_size=20,
+        padding=0,
         tooltip="Página anterior",
         on_click=ir_pagina_anterior,
     )
     btn_pag_sig = ft.IconButton(
         icon=ft.Icons.CHEVRON_RIGHT_ROUNDED,
         icon_color="#0F172A",
+        icon_size=20,
+        padding=0,
         tooltip="Página siguiente",
         on_click=ir_pagina_siguiente,
     )
@@ -604,22 +718,34 @@ def main(page: ft.Page):
             controls=[btn_pag_ant, lbl_pagina_info, btn_pag_sig],
             alignment=ft.MainAxisAlignment.CENTER,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=8,
+            spacing=6,
         ),
         bgcolor=ft.Colors.WHITE,
         border=ft.Border.all(1, "#E2E8F0"),
         border_radius=10,
-        padding=ft.Padding.symmetric(horizontal=8, vertical=2),
+        padding=ft.Padding.symmetric(horizontal=8, vertical=0),
         margin=ft.Margin.only(right=68),
     )
 
     # =========================================================================
     # LISTA DE PRODUCTOS (STOCK ARRIBA A-Z / AGOTADOS AL FINAL A-Z)
     # =========================================================================
+    def on_lista_scroll(e: ft.OnScrollEvent):
+        pixels = getattr(e, "pixels", 0.0) or 0.0
+        ahora = time.monotonic()
+        if pixels > 45 and not estado["modo_compacto"]:
+            if ahora - estado["ultimo_cambio_compacto"] >= 0.3:
+                aplicar_modo_compacto(True)
+        elif pixels <= 5 and estado["modo_compacto"]:
+            if ahora - estado["ultimo_cambio_compacto"] >= 0.45:
+                aplicar_modo_compacto(False)
+
     lista_cards_container = ft.ListView(
         controls=[],
         spacing=8,
         padding=ft.Padding.only(bottom=72),
+        scroll_interval=50,
+        on_scroll=on_lista_scroll,
         expand=True,
     )
 
@@ -948,7 +1074,7 @@ def main(page: ft.Page):
                     mostro_header_agotados = True
                 lista_cards_container.controls.append(crear_tarjeta_producto(prod))
 
-        lbl_contador_resultados.value = f"{total} artículos encontrados"
+        lbl_contador_resultados.value = f"{total} art."
         lbl_contador_resultados.color = p_col["subtext"]
         lbl_pagina_info.value = f"Página {pag} de {total_pags} ({inicio + 1 if total else 0}-{min(fin, total)} de {total})"
         lbl_pagina_info.color = p_col["text"]
@@ -1625,6 +1751,10 @@ def main(page: ft.Page):
         txt_titulo_app.color = p_col["text"]
         btn_pag_ant.icon_color = p_col["text"]
         btn_pag_sig.icon_color = p_col["text"]
+        btn_toggle_compacto.icon_color = p_col["subtext"]
+        btn_quick_tasa.icon_color = p_col["mult_box_txt"]
+        btn_quick_import.icon_color = p_col["accent"]
+        btn_quick_export.icon_color = p_col["subtext"]
 
         card_tasa_dolar.bgcolor = p_col["card"]
         card_tasa_dolar.border = ft.Border.all(1, p_col["border"])
@@ -1644,9 +1774,18 @@ def main(page: ft.Page):
         actualizar_estilo_chips()
         renderizar_pagina_actual()
 
+    compact_btn_style = ft.ButtonStyle(
+        padding=ft.Padding.symmetric(horizontal=8, vertical=0),
+        text_style=ft.TextStyle(size=11, weight=ft.FontWeight.W_600),
+    )
+
     btn_tema = ft.IconButton(
         icon=ft.Icons.DARK_MODE_OUTLINED,
         icon_color="#0F172A",
+        icon_size=19,
+        width=32,
+        height=32,
+        padding=0,
         tooltip="Cambiar tema Claro / Oscuro",
         on_click=alternar_tema,
     )
@@ -1654,15 +1793,28 @@ def main(page: ft.Page):
     # =========================================================================
     # BARRA SUPERIOR DE ACCIONES Y FLOATING ACTION BUTTON (+)
     # =========================================================================
+    btn_editar_tasas = ft.FilledTonalButton(
+        content="Tasa / 1100",
+        icon=ft.Icons.CURRENCY_EXCHANGE_ROUNDED,
+        height=32,
+        style=compact_btn_style,
+        tooltip="Editar Tasa Dólar BCV y Multiplicador 1100",
+        on_click=abrir_modal_tasas,
+    )
+
     btn_importar = ft.FilledTonalButton(
         content="Importar",
         icon=ft.Icons.UPLOAD_FILE_ROUNDED,
+        height=32,
+        style=compact_btn_style,
         on_click=abrir_modal_importar,
     )
 
     btn_exportar = ft.FilledTonalButton(
-        content="Imprimir / PDF",
+        content="PDF / Imprimir",
         icon=ft.Icons.PRINT_ROUNDED,
+        height=32,
+        style=compact_btn_style,
         on_click=abrir_modal_exportacion,
     )
 
@@ -1671,13 +1823,20 @@ def main(page: ft.Page):
         icon=ft.Icons.ADD_ROUNDED,
         bgcolor="#0284C7",
         color=ft.Colors.WHITE,
+        height=32,
+        style=compact_btn_style,
         on_click=abrir_modal_nuevo_producto,
     )
 
     barra_superior = ft.Row(
         controls=[
             ft.Row(controls=[icono_app, txt_titulo_app], spacing=6),
-            ft.Row(controls=[btn_tema, btn_importar, btn_exportar, btn_nuevo], spacing=6, wrap=True),
+            ft.Row(
+                controls=[btn_tema, btn_editar_tasas, btn_importar, btn_exportar, btn_nuevo],
+                spacing=6,
+                run_spacing=6,
+                wrap=True,
+            ),
         ],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1694,22 +1853,22 @@ def main(page: ft.Page):
     )
 
     # =========================================================================
-    # ENSAMBLAJE DE LA VISTA PRINCIPAL
+    # ENSAMBLAJE DE LA VISTA PRINCIPAL CON SAFEAREA (EVITA SOLAPAMIENTO CON STATUS BAR)
     # =========================================================================
-    page.add(
-        barra_superior,
-        card_tasa_dolar,
-        barra_kpis,
-        fila_busqueda,
-        ft.Row(
-            controls=[fila_filtros, lbl_contador_resultados],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            wrap=True,
-        ),
-        lista_cards_container,
-        barra_paginacion,
+    contenido_principal = ft.Column(
+        controls=[
+            barra_superior,
+            card_tasa_dolar,
+            barra_kpis,
+            fila_busqueda,
+            fila_filtros,
+            lista_cards_container,
+            barra_paginacion,
+        ],
+        spacing=6,
+        expand=True,
     )
+    page.add(ft.SafeArea(content=contenido_principal, expand=True))
 
     # Carga inicial inmediata (100% offline desde SQLite en 0ms)
     recargar_datos_y_renderizar()

@@ -51,13 +51,15 @@ jobs:
         with:
           tag_name: v1.2.0
           name: "Inventario Pro v1.2.0 (APK Android Oficial)"
+          make_latest: true
           body: |
             ### Novedades de esta versión:
+            - **Interfaz Móvil Optimizada (SafeArea + Menú Compacto Dinámico)**: Al bajar por la lista de productos, el encabezado se contrae automáticamente dejando una barra de búsqueda compacta con accesos rápidos para ver más artículos cómodamente.
+            - **Reubicación Limpia de Controles de Tasas**: Botón compacto *Tasa / 1100* arriba junto a *Importar*, botón de recarga BCV en la esquina superior derecha del bloque de tasas y lectura cómoda sin solapamientos.
             - **Orden A-Z inteligente**: Los productos en stock (existencia > 0) aparecen primero de la A a la Z, seguidos al final por los productos agotados (A-Z).
             - **Descripciones cortas**: Características clave visibles directamente en cada producto.
             - **Multiplicador Global Editable (1.100,00)**: Precios en Bolívares y Ajustado BCV calculados dinámicamente con modal rápido de edición.
-            - **Modo Oscuro / Claro** con un toque.
-            - **100% Offline**: SQLite nativo local.
+            - **Modo Oscuro / Claro** con un toque y **100% Offline** con SQLite nativo local.
           files: build/apk/InventarioPro_LiquidCCS.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
