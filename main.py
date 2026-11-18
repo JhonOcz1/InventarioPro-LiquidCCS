@@ -21,11 +21,12 @@ import export_service
 # Inicialización obligatoria de SQLite (copia desde assets/ en Android e inserta 297 productos semilla)
 database.seed_database()
 
-ITEMS_POR_PAGINA = 24
+ITEMS_POR_PAGINA = 12
 APP_NOMBRE = "REM"
 APP_VERSION = "1.3.0"
-APP_AUTOR = "Jhon (JhonOcz1 / LiquidCCS)"
-APP_COPYRIGHT = "© 2026 REM • Jhon (LiquidCCS). Todos los derechos reservados."
+APP_AUTOR = "Jhonny Ocariz"
+APP_CONTACTO = "jhonnyocariz122@gmail.com"
+APP_COPYRIGHT = "© 2026 REM • Jhonny Ocariz. Todos los derechos reservados."
 
 
 def main(page: ft.Page):
@@ -47,6 +48,9 @@ def main(page: ft.Page):
         page.window.height = 840
         page.window.min_width = 360
         page.window.min_height = 600
+        ruta_icono_win = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.ico")
+        if os.path.exists(ruta_icono_win):
+            page.window.icon = ruta_icono_win
 
     def es_ancho_movil() -> bool:
         ancho = getattr(page, "width", None)
@@ -176,9 +180,9 @@ def main(page: ft.Page):
         tooltip="REM v1.3 - Sistema de Gestión de Inventario",
     )
     icono_app = ft.Image(
-        src="icon.png",
-        width=28,
-        height=28,
+        src="logo_rem.png",
+        width=30,
+        height=30,
         border_radius=6,
         fit=ft.BoxFit.CONTAIN,
         tooltip="Logo oficial REM v1.3",
@@ -1318,8 +1322,8 @@ def main(page: ft.Page):
 
     lista_cards_container.controls = [empty_state_container] + [s["contenedor_raiz"] for s in pool_tarjetas]
 
-    def renderizar_pagina_actual():
-        """Actualiza los slots pre-construidos del pool sin limpiar ni recrear controles (< 15 ms)."""
+    def renderizar_pagina_actual(actualizar_ui: bool = True):
+        """Actualiza los slots pre-construidos del pool sin limpiar ni recrear controles."""
         p_col = pal()
         t_bcv = estado["tasa_bcv"]
         t_repo = estado["tasa_reposicion"]
@@ -1387,9 +1391,10 @@ def main(page: ft.Page):
         btn_pag_ant.disabled = (pag <= 1)
         btn_pag_sig.disabled = (pag >= total_pags)
         barra_paginacion.visible = (total > ITEMS_POR_PAGINA)
-        page.update()
+        if actualizar_ui:
+            page.update()
 
-    def recargar_datos_y_renderizar():
+    def recargar_datos_y_renderizar(actualizar_ui: bool = True):
         """Consulta SQLite (Stock primero A-Z, Agotados al final A-Z) y actualiza la vista."""
         solo_stock = (estado["categoria_filtro"] == "stock") or estado["solo_stock"]
         solo_agotados = (estado["categoria_filtro"] == "agotados")
@@ -1399,7 +1404,7 @@ def main(page: ft.Page):
             solo_stock=solo_stock,
             solo_agotados=solo_agotados,
         )
-        renderizar_pagina_actual()
+        renderizar_pagina_actual(actualizar_ui=actualizar_ui)
 
     # =========================================================================
     # MODAL 1: CARGA DE UN NUEVO ARTÍCULO
@@ -2135,16 +2140,16 @@ def main(page: ft.Page):
                             controls=[
                                 ft.Container(
                                     content=ft.Image(
-                                        src="icon.png",
-                                        width=72,
-                                        height=72,
+                                        src="logo_rem.png",
+                                        width=78,
+                                        height=78,
                                         border_radius=14,
                                         fit=ft.BoxFit.CONTAIN,
                                         error_content=ft.Icon(ft.Icons.INVENTORY_ROUNDED, color="#0284C7", size=48),
                                     ),
                                     border=ft.Border.all(1, p_col["border"]),
                                     border_radius=16,
-                                    padding=4,
+                                    padding=6,
                                 ),
                                 ft.Text(APP_NOMBRE, size=20, weight=ft.FontWeight.BOLD, color=p_col["text"]),
                                 ft.Text("Sistema Inteligente de Gestión de Inventario", size=12, color=p_col["subtext"]),
@@ -2169,6 +2174,7 @@ def main(page: ft.Page):
                                     fila_dato("Aplicación", "REM - Inventario & Arbitraje Cambiario", ft.Icons.APPS_ROUNDED),
                                     fila_dato("Versión del Sistema", f"v{APP_VERSION} (Android APK & PC Desktop)", ft.Icons.NEW_RELEASES_OUTLINED),
                                     fila_dato("Autor / Propietario", APP_AUTOR, ft.Icons.PERSON_OUTLINE_ROUNDED),
+                                    fila_dato("Correo de Contacto", APP_CONTACTO, ft.Icons.EMAIL_OUTLINED),
                                     fila_dato("Motor y Tecnología", "Python 3 • Flet Material 3 • SQLite3 Offline • DolarApi BCV", ft.Icons.MEMORY_ROUNDED),
                                 ],
                                 spacing=8,
@@ -2456,10 +2462,9 @@ def main(page: ft.Page):
         spacing=6,
         expand=True,
     )
+    # Poblado inicial antes de montar la vista: evita doble renderizado al abrir
+    recargar_datos_y_renderizar(actualizar_ui=False)
     page.add(ft.SafeArea(content=contenido_principal, expand=True))
-
-    # Carga inicial inmediata (100% offline desde SQLite en RAM en < 1 ms)
-    recargar_datos_y_renderizar()
 
 
 if __name__ == "__main__":

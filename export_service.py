@@ -78,7 +78,7 @@ def _generar_pdf_puro_python(
     for idx_pag, lote in enumerate(paginas_datos, start=1):
         lineas_cmd = []
         lineas_cmd.append("0.06 0.09 0.16 rg")
-        lineas_cmd.append(f"BT /F2 14 Tf 30 572 Td ({esc_pdf('REPORTE OFICIAL DE INVENTARIO - LIQUIDCCS')}) Tj ET")
+        lineas_cmd.append(f"BT /F2 14 Tf 30 572 Td ({esc_pdf('REPORTE OFICIAL DE INVENTARIO - REM')}) Tj ET")
         sub = (
             f"Fecha: {fecha_actual} | BCV: {bcv_str} | Reposicion: {repo_str} | "
             f"Articulos: {len(productos)} | Pagina {idx_pag}/{num_paginas}"
@@ -396,7 +396,7 @@ def exportar_inventario_html(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reporte de Inventario - LiquidCCS</title>
+    <title>Reporte de Inventario - REM</title>
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -438,7 +438,7 @@ def exportar_inventario_html(
         <button onclick="window.print()">Imprimir Reporte</button>
     </div>
     <div class="header">
-        <h1>Reporte de Inventario - LiquidCCS</h1>
+        <h1>Reporte de Inventario - REM</h1>
         <div class="meta">
             Fecha: <strong>{fecha_actual}</strong> |
             BCV: <strong>{bcv_str}</strong> |
@@ -487,7 +487,7 @@ def generar_resumen_texto(
     t_repo = _resolver_tasa_repo(tasa_reposicion)
     fecha_actual = datetime.now().strftime("%d/%m/%Y %I:%M %p")
     lineas = [
-        f"*INVENTARIO LIQUIDCCS* ({fecha_actual})",
+        f"*INVENTARIO REM* ({fecha_actual})",
         f"BCV: {database.formatear_bs(tasa_bcv)} | Reposición: {database.formatear_bs(t_repo)} | Artículos: {len(productos)}",
         "-" * 42,
     ]

@@ -394,8 +394,58 @@ PRODUCTOS_INICIALES = [
 ]
 
 
+def _poblar_descripciones_faltantes(cursor) -> int:
+    """Pre-calcula y persiste en SQLite la descripción corta de artículos que aún no la tengan."""
+    cursor.execute("SELECT id, nombre, descripcion FROM productos WHERE descripcion IS NULL OR TRIM(descripcion) = ''")
+    faltantes = cursor.fetchall()
+    if not faltantes:
+        return 0
+    actualizaciones = []
+    for row in faltantes:
+        desc = obtener_descripcion_caracteristicas({"nombre": row["nombre"], "descripcion": ""})
+        actualizaciones.append((desc, row["id"]))
+    cursor.executemany("UPDATE productos SET descripcion = ? WHERE id = ?", actualizaciones)
+    return len(actualizaciones)
+
+
 def seed_database():
-    """Crea las tablas, índices de velocidad, configura tasas por defecto y carga los 297 productos si está vacía."""
+    """Inicializa tablas/datos si hace falta, con vía rápida de lectura sin escrituras en arranques posteriores."""
+    global _CACHE_TASAS, _CACHE_PRODUCTOS
+    db_path = obtener_ruta_db()
+    if os.path.exists(db_path) and os.path.getsize(db_path) > 4096:
+        conn_fast = sqlite3.connect(db_path, timeout=10.0)
+        conn_fast.row_factory = sqlite3.Row
+        try:
+            cur_f = conn_fast.cursor()
+            cur_f.execute(
+                "SELECT COUNT(*) AS total, "
+                "SUM(CASE WHEN descripcion IS NULL OR TRIM(descripcion) = '' THEN 1 ELSE 0 END) AS sin_desc "
+                "FROM productos"
+            )
+            stats_row = cur_f.fetchone()
+            cur_f.execute(
+                "SELECT clave, valor FROM configuracion WHERE clave IN ('tasa_bcv', 'tasa_reposicion')"
+            )
+            cfg_rows = cur_f.fetchall()
+            cfg = {r["clave"]: float(r["valor"]) for r in cfg_rows if r["valor"] is not None}
+            if (
+                stats_row
+                and int(stats_row["total"] or 0) > 0
+                and int(stats_row["sin_desc"] or 0) == 0
+                and "tasa_bcv" in cfg
+                and "tasa_reposicion" in cfg
+            ):
+                _CACHE_TASAS = {
+                    "tasa_bcv": cfg["tasa_bcv"],
+                    "tasa_reposicion": cfg["tasa_reposicion"],
+                }
+                _CACHE_PRODUCTOS = None
+                return
+        except sqlite3.Error:
+            pass
+        finally:
+            conn_fast.close()
+
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -476,6 +526,8 @@ def seed_database():
         INSERT INTO productos (sku, nombre, cantidad, precio_detal_usd, precio_descuento_usd, costo_usd, ubicacion_nota)
         VALUES (?, ?, ?, ?, ?, ?, ?);
         """, PRODUCTOS_INICIALES)
+
+    _poblar_descripciones_faltantes(cursor)
 
     conn.commit()
     conn.close()

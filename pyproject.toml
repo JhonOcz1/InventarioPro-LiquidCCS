@@ -9,10 +9,17 @@ dependencies = [
 ]
 
 [tool.flet]
-org = "com.liquidccs"
+org = "com.jhonnyocariz"
 product = "REM"
-company = "Jhon / LiquidCCS"
-copyright = "Copyright (C) 2026 REM - Jhon (LiquidCCS). Todos los derechos reservados."
+company = "Jhonny Ocariz"
+copyright = "Copyright (C) 2026 REM - Jhonny Ocariz. Todos los derechos reservados."
+
+[tool.flet.splash]
+color = "#F8FAFC"
+dark_color = "#0F172A"
+
+[tool.flet.android]
+adaptive_icon_background = "#FFFFFF"
 
 [tool.flet.app]
 path = "."

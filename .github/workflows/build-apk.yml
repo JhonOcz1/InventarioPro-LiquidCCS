@@ -56,10 +56,10 @@ jobs:
           body: |
             ### Novedades de REM v1.3:
             - **Nueva Identidad Visual REM + Logo Oficial**: Renombrado a **REM** con icono y splash oficiales `R·E·M`.
-            - **Pestaña Desplegable «Acerca de»**: Nuevo botón en la barra superior con información de la app, datos del autor (`Jhon / LiquidCCS`), versión `v1.3.0` y derechos de autor/copyright.
+            - **Pestaña Desplegable «Acerca de»**: Nuevo botón en la barra superior con información de la app, datos del autor (`Jhonny Ocariz`), contacto (`jhonnyocariz122@gmail.com`), versión `v1.3.0` y derechos de autor/copyright.
             - **Textos Descriptivos (Tooltips) en Todos los Botones**: Al dejar el cursor o mantener pulsado sobre cualquier botón, tarjeta o destino del menú se muestra su descripción.
             - **Bloque Ajustado BCV Más Limpio**: Se eliminó el texto inferior `"BCV Directo"`, mostrando directamente el precio ajustado en divisas.
-            - **Rendimiento Instantáneo (< 1 ms en RAM + Pool de 24 Tarjetas)** y animaciones fluidas con efecto Hover.
+            - **Arranque Instantáneo y Logos Ajustados**: Inicio rápido optimizado y ajuste de iconos/splash transparentes para Android, PC y navegador web.
           files: |
             build/apk/REM_v1.3.apk
             build/apk/InventarioPro_LiquidCCS.apk
