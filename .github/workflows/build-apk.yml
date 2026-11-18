@@ -44,3 +44,20 @@ jobs:
           name: InventarioPro-Android-APK
           path: build/apk/*.apk
           if-no-files-found: error
+
+      - name: Release APK
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        with:
+          tag_name: v1.2.0
+          name: "Inventario Pro v1.2.0 (APK Android Oficial)"
+          body: |
+            ### Novedades de esta versión:
+            - **Orden A-Z inteligente**: Los productos en stock (existencia > 0) aparecen primero de la A a la Z, seguidos al final por los productos agotados (A-Z).
+            - **Descripciones cortas**: Características clave visibles directamente en cada producto.
+            - **Multiplicador Global Editable (1.100,00)**: Precios en Bolívares y Ajustado BCV calculados dinámicamente con modal rápido de edición.
+            - **Modo Oscuro / Claro** con un toque.
+            - **100% Offline**: SQLite nativo local.
+          files: build/apk/InventarioPro_LiquidCCS.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
