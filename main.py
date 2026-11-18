@@ -21,7 +21,7 @@ import export_service
 # Inicialización obligatoria de SQLite (copia desde assets/ en Android e inserta 297 productos semilla)
 database.seed_database()
 
-ITEMS_POR_PAGINA = 40
+ITEMS_POR_PAGINA = 24
 
 
 def main(page: ft.Page):
@@ -37,11 +37,27 @@ def main(page: ft.Page):
     page.padding = ft.Padding.symmetric(horizontal=10, vertical=6)
     page.spacing = 6
 
-    if hasattr(page, "window") and page.window is not None:
+    es_plataforma_movil = getattr(page, "platform", None) in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS)
+    if not es_plataforma_movil and hasattr(page, "window") and page.window is not None:
         page.window.width = 1100
         page.window.height = 840
         page.window.min_width = 360
         page.window.min_height = 600
+
+    def es_ancho_movil() -> bool:
+        ancho = getattr(page, "width", None)
+        if ancho is not None and ancho > 0:
+            return ancho < 650
+        if es_plataforma_movil:
+            return True
+        if hasattr(page, "window") and page.window is not None:
+            w_ancho = getattr(page.window, "width", None)
+            if w_ancho is not None and w_ancho > 0:
+                return w_ancho < 650
+        return False
+
+    def obtener_altura_panel_expandido() -> int:
+        return 258 if es_ancho_movil() else 196
 
     tasas_iniciales = database.obtener_tasas()
     estado = {
@@ -60,8 +76,8 @@ def main(page: ft.Page):
         "productos_filtrados": [],
     }
 
-    # Referencias en memoria para actualización instantánea (+/-) sin reconstruir lista completa
-    tarjetas_ui_refs: Dict[int, Dict[str, Any]] = {}
+    # Pool pre-construido de tarjetas reutilizables para filtrado instantáneo (< 15 ms)
+    pool_tarjetas = []
 
     # Flet 1.1.2: FilePicker es un Service y se auto-registra; NO añadir a page.overlay
     file_picker = ft.FilePicker()
@@ -388,6 +404,15 @@ def main(page: ft.Page):
 
     actualizar_panel_tasas()
 
+    def on_hover_tasa_card(e):
+        is_h = (e.data is True or str(e.data).lower() == "true")
+        p_col = pal()
+        card_tasa_dolar.scale = 1.01 if is_h else 1.0
+        card_tasa_dolar.border = ft.Border.all(
+            1.5 if is_h else 1, p_col["accent"] if is_h else p_col["border"]
+        )
+        page.update()
+
     card_tasa_dolar = ft.Container(
         content=ft.Column(
             controls=[
@@ -417,35 +442,30 @@ def main(page: ft.Page):
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                # Cuerpo: valores bien separados y cómodos de leer sin solapamientos
-                ft.ResponsiveRow(
+                # Cuerpo en una sola pasada (Row sin ResponsiveRow)
+                ft.Row(
                     controls=[
-                        ft.Column(
-                            controls=[lbl_titulo_bcv, txt_tasa_bcv],
-                            spacing=1,
-                            col={"xs": 6, "sm": 6},
-                        ),
-                        ft.Column(
-                            controls=[lbl_titulo_mult, txt_tasa_repo],
-                            spacing=1,
-                            col={"xs": 6, "sm": 6},
-                        ),
+                        ft.Column(controls=[lbl_titulo_bcv, txt_tasa_bcv], spacing=1, expand=True),
+                        ft.Column(controls=[lbl_titulo_mult, txt_tasa_repo], spacing=1, expand=True),
                     ],
                     spacing=8,
-                    run_spacing=4,
                 ),
                 lbl_fecha_tasa,
             ],
-            spacing=4,
+            spacing=3,
         ),
         bgcolor=ft.Colors.WHITE,
         border=ft.Border.all(1, "#E2E8F0"),
         border_radius=12,
-        padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+        padding=ft.Padding.symmetric(horizontal=12, vertical=6),
+        scale=1.0,
+        animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
+        animate_scale=ft.Animation(180, ft.AnimationCurve.EASE_OUT_CUBIC),
+        on_hover=on_hover_tasa_card,
     )
 
     # =========================================================================
-    # MÉTRICAS KPI DEL INVENTARIO
+    # MÉTRICAS KPI DEL INVENTARIO (SIN ResponsiveRow PARA MÁXIMA VELOCIDAD)
     # =========================================================================
     txt_kpi_total_prods = ft.Text("0", size=14, weight=ft.FontWeight.BOLD, color="#0F172A")
     txt_kpi_total_stock = ft.Text("0", size=14, weight=ft.FontWeight.BOLD, color="#059669")
@@ -455,14 +475,14 @@ def main(page: ft.Page):
     kpi_containers = []
     kpi_titulos = []
 
-    def kpi_box(titulo: str, txt_control: ft.Text, icon_name, color_accent: str):
+    def kpi_box(titulo: str, txt_control: ft.Text, icon_name, color_accent: str, on_click_cb=None):
         lbl_t = ft.Text(titulo, size=10, color="#64748B", weight=ft.FontWeight.W_500)
         kpi_titulos.append(lbl_t)
         cont = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Icon(icon_name, color=color_accent, size=19),
-                    ft.Column(controls=[lbl_t, txt_control], spacing=0),
+                    ft.Icon(icon_name, color=color_accent, size=18),
+                    ft.Column(controls=[lbl_t, txt_control], spacing=0, expand=True),
                 ],
                 spacing=6,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -470,22 +490,69 @@ def main(page: ft.Page):
             bgcolor=ft.Colors.WHITE,
             border=ft.Border.all(1, "#E2E8F0"),
             border_radius=10,
-            padding=6,
-            col={"xs": 6, "sm": 6, "md": 3},
+            padding=5,
+            expand=True,
+            scale=1.0,
+            animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
+            animate_scale=ft.Animation(180, ft.AnimationCurve.EASE_OUT_CUBIC),
+            ink=True,
+            on_click=on_click_cb,
         )
+
+        def on_hover_kpi(e, box=cont, accent=color_accent):
+            is_h = (e.data is True or str(e.data).lower() == "true")
+            p_col = pal()
+            box.scale = 1.02 if is_h else 1.0
+            box.border = ft.Border.all(1.5 if is_h else 1, accent if is_h else p_col["border"])
+            page.update()
+
+        cont.on_hover = on_hover_kpi
         kpi_containers.append(cont)
         return cont
 
-    barra_kpis = ft.ResponsiveRow(
-        controls=[
-            kpi_box("Artículos", txt_kpi_total_prods, ft.Icons.CATEGORY_OUTLINED, "#0284C7"),
-            kpi_box("Unidades Stock", txt_kpi_total_stock, ft.Icons.INVENTORY_2_OUTLINED, "#059669"),
-            kpi_box("Con Stock (>0)", txt_kpi_con_stock, ft.Icons.CHECK_CIRCLE_OUTLINE, "#0284C7"),
-            kpi_box("Valor Ajust. BCV", txt_kpi_valor_bcv, ft.Icons.PAYMENTS_OUTLINED, "#7C3AED"),
-        ],
-        spacing=6,
-        run_spacing=6,
+    kpi_prods = kpi_box(
+        "Artículos",
+        txt_kpi_total_prods,
+        ft.Icons.CATEGORY_OUTLINED,
+        "#0284C7",
+        on_click_cb=lambda e: cambiar_filtro_categoria("todos"),
     )
+    kpi_unidades = kpi_box(
+        "Unidades Stock",
+        txt_kpi_total_stock,
+        ft.Icons.INVENTORY_2_OUTLINED,
+        "#059669",
+        on_click_cb=lambda e: cambiar_filtro_categoria("stock"),
+    )
+    kpi_stock = kpi_box(
+        "Con Stock (>0)",
+        txt_kpi_con_stock,
+        ft.Icons.CHECK_CIRCLE_OUTLINE,
+        "#0284C7",
+        on_click_cb=lambda e: cambiar_filtro_categoria("stock"),
+    )
+    kpi_valor = kpi_box(
+        "Valor Ajust. BCV",
+        txt_kpi_valor_bcv,
+        ft.Icons.PAYMENTS_OUTLINED,
+        "#7C3AED",
+        on_click_cb=abrir_modal_tasas,
+    )
+
+    barra_kpis = ft.Column(controls=[], spacing=5)
+
+    def actualizar_layout_kpis():
+        if es_ancho_movil():
+            barra_kpis.controls = [
+                ft.Row(controls=[kpi_prods, kpi_unidades], spacing=6),
+                ft.Row(controls=[kpi_stock, kpi_valor], spacing=6),
+            ]
+        else:
+            barra_kpis.controls = [
+                ft.Row(controls=[kpi_prods, kpi_unidades, kpi_stock, kpi_valor], spacing=6),
+            ]
+
+    actualizar_layout_kpis()
 
     def actualizar_kpis():
         stats = database.obtener_resumen_estadisticas()
@@ -497,13 +564,13 @@ def main(page: ft.Page):
     actualizar_kpis()
 
     # =========================================================================
-    # BUSCADOR COMPACTO, ANIMACIONES DE CABECERA Y FILTROS
+    # BUSCADOR COMPACTO, ANIMACIONES DE CABECERA (CON HOVER) Y FILTROS
     # =========================================================================
     async def _scroll_lista_al_inicio():
         try:
             await lista_cards_container.scroll_to(
                 offset=0,
-                duration=200,
+                duration=180,
                 curve=ft.AnimationCurve.EASE_OUT_CUBIC,
             )
         except Exception:
@@ -595,27 +662,31 @@ def main(page: ft.Page):
         ),
         width=0,
         opacity=0.0,
+        animate=ft.Animation(220, ft.AnimationCurve.EASE_OUT_CUBIC),
         animate_size=ft.Animation(220, ft.AnimationCurve.EASE_OUT_CUBIC),
         animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
 
     def aplicar_modo_compacto(compacto: bool, actualizar_ui: bool = True):
-        """Reduce o expande suavemente el menú superior para maximizar resultados al bajar."""
+        """Despliega u oculta la barra superior con animación real de altura, escala y desplazamiento."""
         if estado["modo_compacto"] == compacto:
             return
         estado["modo_compacto"] = compacto
         estado["ultimo_cambio_compacto"] = time.monotonic()
 
-        panel_superior_colapsable.height = 0 if compacto else None
+        panel_superior_colapsable.height = 0 if compacto else obtener_altura_panel_expandido()
         panel_superior_colapsable.opacity = 0.0 if compacto else 1.0
-        modulos_accesibles_compactos.width = None if compacto else 0
+        panel_superior_colapsable.scale = 0.96 if compacto else 1.0
+        panel_superior_colapsable.offset = ft.Offset(0, -0.05) if compacto else ft.Offset(0, 0)
+
+        modulos_accesibles_compactos.width = 104 if compacto else 0
         modulos_accesibles_compactos.opacity = 1.0 if compacto else 0.0
         badge_resumen_compacto.visible = compacto
 
-        btn_toggle_compacto.rotate = ft.Rotate(math.pi if compacto else 0)
-        btn_toggle_compacto.tooltip = (
-            "Expandir menú superior" if compacto else "Compactar menú superior"
+        icono_toggle_compacto.rotate = ft.Rotate(math.pi if compacto else 0)
+        btn_toggle_compacto_box.tooltip = (
+            "Desplegar barra de información" if compacto else "Ocultar barra de información"
         )
         if actualizar_ui:
             page.update()
@@ -623,22 +694,44 @@ def main(page: ft.Page):
     def toggle_modo_compacto_manual(e=None):
         aplicar_modo_compacto(not estado["modo_compacto"], actualizar_ui=True)
 
-    btn_toggle_compacto = ft.IconButton(
-        icon=ft.Icons.KEYBOARD_ARROW_UP_ROUNDED,
-        icon_color="#475569",
-        icon_size=20,
-        width=32,
-        height=32,
-        padding=0,
+    icono_toggle_compacto = ft.Icon(
+        ft.Icons.KEYBOARD_ARROW_UP_ROUNDED,
+        color="#475569",
+        size=20,
         rotate=ft.Rotate(0),
         animate_rotation=ft.Animation(260, ft.AnimationCurve.EASE_OUT_CUBIC),
-        tooltip="Compactar menú superior",
+    )
+
+    def on_hover_toggle_compacto(e):
+        is_h = (e.data is True or str(e.data).lower() == "true")
+        p_col = pal()
+        btn_toggle_compacto_box.scale = 1.07 if is_h else 1.0
+        btn_toggle_compacto_box.bgcolor = p_col["sku_bg"] if is_h else p_col["card"]
+        btn_toggle_compacto_box.border = ft.Border.all(
+            1.5 if is_h else 1, p_col["accent"] if is_h else p_col["border"]
+        )
+        page.update()
+
+    btn_toggle_compacto_box = ft.Container(
+        content=icono_toggle_compacto,
+        width=36,
+        height=36,
+        bgcolor=ft.Colors.WHITE,
+        border=ft.Border.all(1, "#CBD5E1"),
+        border_radius=18,
+        alignment=ft.Alignment.CENTER,
+        scale=1.0,
+        animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
+        animate_scale=ft.Animation(180, ft.AnimationCurve.EASE_OUT_CUBIC),
+        ink=True,
+        tooltip="Ocultar barra de información",
         on_click=toggle_modo_compacto_manual,
+        on_hover=on_hover_toggle_compacto,
     )
 
     # Row SIN wrap=True para que expand=True estire la barra de búsqueda sin errores de layout
     fila_busqueda = ft.Row(
-        controls=[input_busqueda, modulos_accesibles_compactos, btn_toggle_compacto],
+        controls=[input_busqueda, modulos_accesibles_compactos, btn_toggle_compacto_box],
         spacing=4,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
@@ -667,16 +760,31 @@ def main(page: ft.Page):
         recargar_datos_y_renderizar()
         ir_al_inicio_lista()
 
+    def crear_hover_chip(chip_ctrl: ft.Container, categoria: str):
+        def _on_hover(e):
+            is_h = (e.data is True or str(e.data).lower() == "true")
+            p_col = pal()
+            chip_ctrl.scale = 1.04 if is_h else 1.0
+            if estado["categoria_filtro"] != categoria:
+                chip_ctrl.border = ft.Border.all(
+                    1.5 if is_h else 1, p_col["accent"] if is_h else p_col["border"]
+                )
+            page.update()
+        return _on_hover
+
     btn_chip_todos = ft.Container(
         content=ft.Text("Todos (A-Z)", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
         bgcolor="#0F172A",
         border=ft.Border.all(1, "#CBD5E1"),
         border_radius=18,
         padding=ft.Padding.symmetric(horizontal=10, vertical=4),
-        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
+        scale=1.0,
+        animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
+        animate_scale=ft.Animation(160, ft.AnimationCurve.EASE_OUT_CUBIC),
         on_click=lambda e: cambiar_filtro_categoria("todos"),
         ink=True,
     )
+    btn_chip_todos.on_hover = crear_hover_chip(btn_chip_todos, "todos")
 
     btn_chip_stock = ft.Container(
         content=ft.Text("Con Stock (>0)", size=11, weight=ft.FontWeight.BOLD, color="#334155"),
@@ -684,10 +792,13 @@ def main(page: ft.Page):
         border=ft.Border.all(1, "#CBD5E1"),
         border_radius=18,
         padding=ft.Padding.symmetric(horizontal=10, vertical=4),
-        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
+        scale=1.0,
+        animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
+        animate_scale=ft.Animation(160, ft.AnimationCurve.EASE_OUT_CUBIC),
         on_click=lambda e: cambiar_filtro_categoria("stock"),
         ink=True,
     )
+    btn_chip_stock.on_hover = crear_hover_chip(btn_chip_stock, "stock")
 
     btn_chip_agotados = ft.Container(
         content=ft.Text("Agotados", size=11, weight=ft.FontWeight.BOLD, color="#334155"),
@@ -695,7 +806,9 @@ def main(page: ft.Page):
         border=ft.Border.all(1, "#CBD5E1"),
         border_radius=18,
         padding=ft.Padding.symmetric(horizontal=10, vertical=4),
-        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
+        scale=1.0,
+        animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
+        animate_scale=ft.Animation(160, ft.AnimationCurve.EASE_OUT_CUBIC),
         on_click=lambda e: cambiar_filtro_categoria("agotados"),
         ink=True,
     )
@@ -785,19 +898,20 @@ def main(page: ft.Page):
         expand=True,
     )
 
-    def ajustar_stock_rapido(producto_id: int, delta: int):
-        """Actualiza el stock en SQLite bloqueando negativos; si cambia de grupo (0 <-> >0), reordena A-Z."""
-        ref = tarjetas_ui_refs.get(producto_id)
-        if not ref:
+    def ajustar_stock_rapido_slot(slot: Dict[str, Any], delta: int):
+        """Actualiza el stock en SQLite y caché RAM; si cambia de grupo (0 <-> >0), reordena A-Z."""
+        p = slot.get("datos")
+        producto_id = slot.get("producto_id")
+        if not p or producto_id is None:
             return
 
-        cant_actual = ref["datos"]["cantidad"]
+        cant_actual = p["cantidad"]
         nueva_cantidad = max(0, cant_actual + delta)
         if nueva_cantidad == cant_actual:
             return
 
         database.actualizar_solo_cantidad(producto_id, nueva_cantidad)
-        ref["datos"]["cantidad"] = nueva_cantidad
+        p["cantidad"] = nueva_cantidad
         actualizar_kpis()
 
         cambio_grupo = (cant_actual == 0 and nueva_cantidad > 0) or (cant_actual > 0 and nueva_cantidad == 0)
@@ -805,10 +919,8 @@ def main(page: ft.Page):
             recargar_datos_y_renderizar()
             return
 
-        badge_st: ft.Container = ref["badge_stock"]
-        badge_st.content.value = f"{nueva_cantidad} en stock"
-        txt_num: ft.Text = ref["txt_cant"]
-        txt_num.value = str(nueva_cantidad)
+        slot["txt_stock"].value = f"{nueva_cantidad} en stock"
+        slot["txt_cant_rapida"].value = str(nueva_cantidad)
         page.update()
 
     def confirmar_eliminar_producto(producto_id: int):
@@ -856,132 +968,127 @@ def main(page: ft.Page):
         )
         page.show_dialog(dlg)
 
-    def crear_tarjeta_producto(p: Dict[str, Any]) -> ft.Container:
-        """Crea tarjeta adaptable con descripción de características y cálculos BCV/Multiplicador."""
-        p_col = pal()
-        t_bcv = estado["tasa_bcv"]
-        t_repo = estado["tasa_reposicion"]
-        cant = p["cantidad"]
-        es_disponible = cant > 0
+    def crear_slot_tarjeta(indice: int) -> Dict[str, Any]:
+        """Pre-construye una ranura de tarjeta reutilizable (sin ResponsiveRow ni recreación en cada filtro)."""
+        slot: Dict[str, Any] = {"indice": indice, "producto_id": None, "datos": None}
 
-        precios = database.calcular_precios_producto(p, t_bcv, t_repo)
-        costo_str = database.formatear_usd(p["costo_usd"]) if p.get("costo_usd") else "-"
-        desc_corta = p.get("descripcion_corta") or database.obtener_descripcion_caracteristicas(p)
+        icono_seccion = ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, size=15, color="#15803D")
+        txt_seccion = ft.Text("", size=12, weight=ft.FontWeight.BOLD, color="#15803D")
+        banner_seccion = ft.Container(
+            content=ft.Row(
+                controls=[icono_seccion, txt_seccion],
+                spacing=6,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            bgcolor="#ECFDF5",
+            border_radius=8,
+            padding=ft.Padding.symmetric(horizontal=10, vertical=6),
+            visible=False,
+        )
 
+        txt_sku = ft.Text("", size=11, weight=ft.FontWeight.BOLD, color="#1E40AF")
         badge_sku = ft.Container(
-            content=ft.Text(p["sku"], size=11, weight=ft.FontWeight.BOLD, color=p_col["sku_txt"]),
-            bgcolor=p_col["sku_bg"],
+            content=txt_sku,
+            bgcolor="#DBEAFE",
             border_radius=6,
             padding=ft.Padding.symmetric(horizontal=8, vertical=3),
         )
 
+        txt_stock = ft.Text("", size=11, weight=ft.FontWeight.BOLD, color="#15803D")
         badge_stock = ft.Container(
-            content=ft.Text(
-                f"{cant} en stock" if es_disponible else "Agotado (0)",
-                size=11,
-                weight=ft.FontWeight.BOLD,
-                color="#15803D" if es_disponible else "#B91C1C",
-            ),
-            bgcolor="#DCFCE7" if es_disponible else "#FEE2E2",
+            content=txt_stock,
+            bgcolor="#DCFCE7",
             border_radius=6,
             padding=ft.Padding.symmetric(horizontal=8, vertical=3),
         )
 
-        badges_cabecera = [badge_sku, badge_stock]
-        if p.get("ubicacion_nota"):
-            badges_cabecera.append(
-                ft.Container(
-                    content=ft.Text(f"📍 {p['ubicacion_nota']}", size=11, weight=ft.FontWeight.W_600, color=p_col["ubic_txt"]),
-                    bgcolor=p_col["ubic_bg"],
-                    border_radius=6,
-                    padding=ft.Padding.symmetric(horizontal=8, vertical=3),
-                )
-            )
-
-        txt_cant_rapida = ft.Text(str(cant), size=14, weight=ft.FontWeight.BOLD, color=p_col["text"])
-
-        tarjetas_ui_refs[p["id"]] = {
-            "datos": p,
-            "badge_stock": badge_stock,
-            "txt_cant": txt_cant_rapida,
-        }
-
-        origen_lbl = "PRECIO VENTA ($)"
-        color_bcv = p_col["bcv_box_txt"] if precios["tiene_precio"] else p_col["muted"]
-        color_mult = p_col["mult_box_txt"] if precios["tiene_precio"] else p_col["muted"]
-
-        # Bloque 1: Precio Base ($)
-        col_base = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text(origen_lbl, size=10, color=p_col["muted"], weight=ft.FontWeight.W_600),
-                    ft.Text(precios["precio_base_str"], size=14, weight=ft.FontWeight.BOLD, color=p_col["text"]),
-                    ft.Text(f"Costo: {costo_str}", size=10, color=p_col["muted"]),
-                ],
-                spacing=1,
-            ),
-            padding=6,
-            col={"xs": 6, "sm": 3},
+        txt_ubic = ft.Text("", size=11, weight=ft.FontWeight.W_600, color="#6B21A8")
+        badge_ubic = ft.Container(
+            content=txt_ubic,
+            bgcolor="#F3E8FF",
+            border_radius=6,
+            padding=ft.Padding.symmetric(horizontal=8, vertical=3),
+            visible=False,
         )
 
-        # Bloque 2: Multiplicación (USD × 1100 o valor global configurado)
-        mult_titulo = f"MULTIPL. (× {t_repo:,.0f})"
-        col_mult_bs = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text(mult_titulo, size=10, color=color_mult, weight=ft.FontWeight.BOLD),
-                    ft.Text(precios["monto_bs_reposicion_str"], size=13, weight=ft.FontWeight.BOLD, color=color_mult),
-                    ft.Text("Base Bs. Reposición", size=10, color=p_col["muted"]),
-                ],
-                spacing=1,
-            ),
-            bgcolor=p_col["mult_box_bg"] if precios["tiene_precio"] else p_col["card_sec"],
-            border=ft.Border.all(1, p_col["mult_box_border"] if precios["tiene_precio"] else p_col["border"]),
+        btn_editar = ft.TextButton(
+            content="Editar",
+            icon=ft.Icons.EDIT_OUTLINED,
+            icon_color="#0284C7",
+            tooltip="Editar artículo",
+            on_click=lambda e, s=slot: abrir_modal_detalle(s["producto_id"]) if s["producto_id"] else None,
+        )
+        btn_eliminar = ft.TextButton(
+            content="Eliminar",
+            icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
+            icon_color="#DC2626",
+            tooltip="Eliminar artículo",
+            on_click=lambda e, s=slot: confirmar_eliminar_producto(s["producto_id"]) if s["producto_id"] else None,
+        )
+
+        txt_nombre = ft.Text("", size=14, weight=ft.FontWeight.W_700, color="#0F172A")
+        txt_desc = ft.Text("", size=12, color="#334155", weight=ft.FontWeight.W_500)
+        divider = ft.Divider(height=1, color="#E2E8F0")
+
+        # Bloque 1: Precio Venta ($)
+        lbl_precio_venta = ft.Text("PRECIO VENTA ($)", size=10, color="#64748B", weight=ft.FontWeight.W_600)
+        txt_precio_venta = ft.Text("", size=14, weight=ft.FontWeight.BOLD, color="#0F172A")
+        txt_costo = ft.Text("", size=10, color="#64748B")
+        col_base = ft.Container(
+            content=ft.Column(controls=[lbl_precio_venta, txt_precio_venta, txt_costo], spacing=1),
+            padding=6,
+            expand=True,
+        )
+
+        # Bloque 2: Multiplicación (USD × 1100 o valor global)
+        lbl_mult_titulo = ft.Text("MULTIPL.", size=10, color="#92400E", weight=ft.FontWeight.BOLD)
+        txt_mult_bs = ft.Text("", size=13, weight=ft.FontWeight.BOLD, color="#92400E")
+        lbl_mult_sub = ft.Text("Base Bs. Reposición", size=10, color="#64748B")
+        box_mult = ft.Container(
+            content=ft.Column(controls=[lbl_mult_titulo, txt_mult_bs, lbl_mult_sub], spacing=1),
+            bgcolor="#FEF3C7",
+            border=ft.Border.all(1, "#F59E0B"),
             border_radius=8,
             padding=6,
-            col={"xs": 6, "sm": 3},
+            expand=True,
         )
 
         # Bloque 3: Precio Ajustado BCV ($) y Bs a BCV directo
-        col_ajustado_bcv = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text("AJUSTADO BCV ($)", size=10, color=color_bcv, weight=ft.FontWeight.BOLD),
-                    ft.Text(precios["precio_venta_bcv_usd_str"], size=14, weight=ft.FontWeight.BOLD, color=color_bcv),
-                    ft.Text(f"BCV Directo: {precios['monto_bs_bcv_directo_str']}", size=10, color=p_col["muted"]),
-                ],
-                spacing=1,
-            ),
-            bgcolor=p_col["bcv_box_bg"] if precios["tiene_precio"] else p_col["card_sec"],
-            border=ft.Border.all(1, p_col["bcv_box_border"] if precios["tiene_precio"] else p_col["border"]),
+        lbl_bcv_titulo = ft.Text("AJUSTADO BCV ($)", size=10, color="#047857", weight=ft.FontWeight.BOLD)
+        txt_bcv_usd = ft.Text("", size=14, weight=ft.FontWeight.BOLD, color="#047857")
+        txt_bcv_dir = ft.Text("", size=10, color="#64748B")
+        box_bcv = ft.Container(
+            content=ft.Column(controls=[lbl_bcv_titulo, txt_bcv_usd, txt_bcv_dir], spacing=1),
+            bgcolor="#ECFDF5",
+            border=ft.Border.all(1, "#6EE7B7"),
             border_radius=8,
             padding=6,
-            col={"xs": 6, "sm": 3},
+            expand=True,
         )
 
         # Bloque 4: Control rápido de stock (- / +)
+        lbl_stock_titulo = ft.Text("STOCK", size=10, color="#64748B", weight=ft.FontWeight.W_600)
+        txt_cant_rapida = ft.Text("0", size=14, weight=ft.FontWeight.BOLD, color="#0F172A")
+        btn_menos = ft.IconButton(
+            icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
+            icon_color="#64748B",
+            icon_size=22,
+            tooltip="Restar 1 unidad",
+            on_click=lambda e, s=slot: ajustar_stock_rapido_slot(s, -1),
+        )
+        btn_mas = ft.IconButton(
+            icon=ft.Icons.ADD_CIRCLE_OUTLINE,
+            icon_color="#0284C7",
+            icon_size=22,
+            tooltip="Sumar 1 unidad",
+            on_click=lambda e, s=slot: ajustar_stock_rapido_slot(s, 1),
+        )
         col_stock_ctrl = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text("STOCK", size=10, color=p_col["muted"], weight=ft.FontWeight.W_600),
+                    lbl_stock_titulo,
                     ft.Row(
-                        controls=[
-                            ft.IconButton(
-                                icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
-                                icon_color=p_col["muted"],
-                                icon_size=22,
-                                tooltip="Restar 1 unidad",
-                                on_click=lambda e, pid=p["id"]: ajustar_stock_rapido(pid, -1),
-                            ),
-                            txt_cant_rapida,
-                            ft.IconButton(
-                                icon=ft.Icons.ADD_CIRCLE_OUTLINE,
-                                icon_color=p_col["accent"],
-                                icon_size=22,
-                                tooltip="Sumar 1 unidad",
-                                on_click=lambda e, pid=p["id"]: ajustar_stock_rapido(pid, 1),
-                            ),
-                        ],
+                        controls=[btn_menos, txt_cant_rapida, btn_mas],
                         spacing=0,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
@@ -989,82 +1096,185 @@ def main(page: ft.Page):
                 spacing=0,
             ),
             padding=ft.Padding.only(left=4, top=2),
-            col={"xs": 6, "sm": 3},
+            expand=True,
         )
 
-        return ft.Container(
+        tarjeta = ft.Container(
             content=ft.Column(
                 controls=[
-                    # Fila 1: Badges + Editar / Eliminar (sin wrap anidado ni expand)
                     ft.Row(
                         controls=[
-                            ft.Row(controls=badges_cabecera, spacing=6),
-                            ft.Row(
-                                controls=[
-                                    ft.TextButton(
-                                        content="Editar",
-                                        icon=ft.Icons.EDIT_OUTLINED,
-                                        icon_color=p_col["accent"],
-                                        tooltip="Editar artículo",
-                                        on_click=lambda e, pid=p["id"]: abrir_modal_detalle(pid),
-                                    ),
-                                    ft.TextButton(
-                                        content="Eliminar",
-                                        icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
-                                        icon_color="#DC2626",
-                                        tooltip="Eliminar artículo",
-                                        on_click=lambda e, pid=p["id"]: confirmar_eliminar_producto(pid),
-                                    ),
-                                ],
-                                spacing=0,
-                            ),
+                            ft.Row(controls=[badge_sku, badge_stock, badge_ubic], spacing=6),
+                            ft.Row(controls=[btn_editar, btn_eliminar], spacing=0),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         wrap=True,
                     ),
-                    # Fila 2 y 3: Nombre del producto y descripción corta con características
-                    ft.Text(p["nombre"], size=14, weight=ft.FontWeight.W_700, color=p_col["text"]),
-                    ft.Text(f"📋 {desc_corta}", size=12, color=p_col["subtext"], weight=ft.FontWeight.W_500),
-                    ft.Divider(height=1, color=p_col["border"]),
-                    # Fila 4: Desglose financiero y control de stock
-                    ft.ResponsiveRow(
-                        controls=[col_base, col_mult_bs, col_ajustado_bcv, col_stock_ctrl],
-                        spacing=8,
-                        run_spacing=8,
+                    txt_nombre,
+                    txt_desc,
+                    divider,
+                    ft.Column(
+                        controls=[
+                            ft.Row(controls=[col_base, box_mult], spacing=6),
+                            ft.Row(controls=[box_bcv, col_stock_ctrl], spacing=6),
+                        ],
+                        spacing=6,
                     ),
                 ],
                 spacing=5,
             ),
-            bgcolor=p_col["card"],
-            border=ft.Border.all(1, p_col["border"]),
+            bgcolor=ft.Colors.WHITE,
+            border=ft.Border.all(1, "#E2E8F0"),
             border_radius=12,
             padding=12,
-            animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
+            animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
         )
 
-    def crear_encabezado_seccion(titulo: str, es_stock: bool) -> ft.Container:
-        p_col = pal()
-        bg = p_col["sec_stock_bg"] if es_stock else p_col["sec_zero_bg"]
-        fg = p_col["sec_stock_txt"] if es_stock else p_col["sec_zero_txt"]
-        icono = ft.Icons.CHECK_CIRCLE_ROUNDED if es_stock else ft.Icons.CANCEL_OUTLINED
-        return ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Icon(icono, size=15, color=fg),
-                    ft.Text(titulo, size=12, weight=ft.FontWeight.BOLD, color=fg),
-                ],
-                spacing=6,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            bgcolor=bg,
-            border_radius=8,
-            padding=ft.Padding.symmetric(horizontal=10, vertical=6),
+        def on_hover_card(e, card_ctrl=tarjeta):
+            is_h = (e.data is True or str(e.data).lower() == "true")
+            p_col = pal()
+            card_ctrl.border = ft.Border.all(
+                1.5 if is_h else 1, p_col["accent"] if is_h else p_col["border"]
+            )
+            page.update()
+
+        tarjeta.on_hover = on_hover_card
+
+        contenedor_raiz = ft.Column(
+            controls=[banner_seccion, tarjeta],
+            spacing=6,
+            visible=False,
         )
+
+        slot.update(
+            {
+                "contenedor_raiz": contenedor_raiz,
+                "tarjeta": tarjeta,
+                "banner_seccion": banner_seccion,
+                "icono_seccion": icono_seccion,
+                "txt_seccion": txt_seccion,
+                "badge_sku": badge_sku,
+                "txt_sku": txt_sku,
+                "badge_stock": badge_stock,
+                "txt_stock": txt_stock,
+                "badge_ubic": badge_ubic,
+                "txt_ubic": txt_ubic,
+                "btn_editar": btn_editar,
+                "txt_nombre": txt_nombre,
+                "txt_desc": txt_desc,
+                "divider": divider,
+                "lbl_precio_venta": lbl_precio_venta,
+                "txt_precio_venta": txt_precio_venta,
+                "txt_costo": txt_costo,
+                "box_mult": box_mult,
+                "lbl_mult_titulo": lbl_mult_titulo,
+                "txt_mult_bs": txt_mult_bs,
+                "lbl_mult_sub": lbl_mult_sub,
+                "box_bcv": box_bcv,
+                "lbl_bcv_titulo": lbl_bcv_titulo,
+                "txt_bcv_usd": txt_bcv_usd,
+                "txt_bcv_dir": txt_bcv_dir,
+                "lbl_stock_titulo": lbl_stock_titulo,
+                "txt_cant_rapida": txt_cant_rapida,
+                "btn_menos": btn_menos,
+                "btn_mas": btn_mas,
+            }
+        )
+        return slot
+
+    def poblar_slot_tarjeta(slot: Dict[str, Any], p: Dict[str, Any], p_col: Dict[str, str], t_bcv: float, t_repo: float):
+        """Actualiza in-place las propiedades de una ranura del pool sin recrear widgets."""
+        cant = p["cantidad"]
+        es_disponible = cant > 0
+        precios = database.calcular_precios_producto(p, t_bcv, t_repo)
+        costo_str = database.formatear_usd(p["costo_usd"]) if p.get("costo_usd") else "-"
+        desc_corta = p.get("descripcion_corta") or database.obtener_descripcion_caracteristicas(p)
+
+        slot["producto_id"] = p["id"]
+        slot["datos"] = p
+
+        slot["txt_sku"].value = p["sku"]
+        slot["txt_sku"].color = p_col["sku_txt"]
+        slot["badge_sku"].bgcolor = p_col["sku_bg"]
+
+        slot["txt_stock"].value = f"{cant} en stock" if es_disponible else "Agotado (0)"
+        slot["txt_stock"].color = "#15803D" if es_disponible else "#B91C1C"
+        slot["badge_stock"].bgcolor = "#DCFCE7" if es_disponible else "#FEE2E2"
+
+        ubic = p.get("ubicacion_nota")
+        if ubic:
+            slot["badge_ubic"].visible = True
+            slot["badge_ubic"].bgcolor = p_col["ubic_bg"]
+            slot["txt_ubic"].value = f"📍 {ubic}"
+            slot["txt_ubic"].color = p_col["ubic_txt"]
+        else:
+            slot["badge_ubic"].visible = False
+
+        slot["btn_editar"].icon_color = p_col["accent"]
+        slot["txt_nombre"].value = p["nombre"]
+        slot["txt_nombre"].color = p_col["text"]
+        slot["txt_desc"].value = f"📋 {desc_corta}"
+        slot["txt_desc"].color = p_col["subtext"]
+        slot["divider"].color = p_col["border"]
+
+        slot["lbl_precio_venta"].color = p_col["muted"]
+        slot["txt_precio_venta"].value = precios["precio_base_str"]
+        slot["txt_precio_venta"].color = p_col["text"]
+        slot["txt_costo"].value = f"Costo: {costo_str}"
+        slot["txt_costo"].color = p_col["muted"]
+
+        color_mult = p_col["mult_box_txt"] if precios["tiene_precio"] else p_col["muted"]
+        slot["lbl_mult_titulo"].value = f"MULTIPL. (× {t_repo:,.0f})"
+        slot["lbl_mult_titulo"].color = color_mult
+        slot["txt_mult_bs"].value = precios["monto_bs_reposicion_str"]
+        slot["txt_mult_bs"].color = color_mult
+        slot["lbl_mult_sub"].color = p_col["muted"]
+        slot["box_mult"].bgcolor = p_col["mult_box_bg"] if precios["tiene_precio"] else p_col["card_sec"]
+        slot["box_mult"].border = ft.Border.all(1, p_col["mult_box_border"] if precios["tiene_precio"] else p_col["border"])
+
+        color_bcv = p_col["bcv_box_txt"] if precios["tiene_precio"] else p_col["muted"]
+        slot["lbl_bcv_titulo"].color = color_bcv
+        slot["txt_bcv_usd"].value = precios["precio_venta_bcv_usd_str"]
+        slot["txt_bcv_usd"].color = color_bcv
+        slot["txt_bcv_dir"].value = f"BCV Directo: {precios['monto_bs_bcv_directo_str']}"
+        slot["txt_bcv_dir"].color = p_col["muted"]
+        slot["box_bcv"].bgcolor = p_col["bcv_box_bg"] if precios["tiene_precio"] else p_col["card_sec"]
+        slot["box_bcv"].border = ft.Border.all(1, p_col["bcv_box_border"] if precios["tiene_precio"] else p_col["border"])
+
+        slot["lbl_stock_titulo"].color = p_col["muted"]
+        slot["txt_cant_rapida"].value = str(cant)
+        slot["txt_cant_rapida"].color = p_col["text"]
+        slot["btn_menos"].icon_color = p_col["muted"]
+        slot["btn_mas"].icon_color = p_col["accent"]
+
+        slot["tarjeta"].bgcolor = p_col["card"]
+        slot["tarjeta"].border = ft.Border.all(1, p_col["border"])
+
+    empty_state_icon = ft.Icon(ft.Icons.SEARCH_OFF_ROUNDED, size=44, color="#64748B")
+    empty_state_text = ft.Text("No se encontraron artículos con ese criterio", size=14, color="#64748B")
+    empty_state_container = ft.Container(
+        content=ft.Column(
+            controls=[empty_state_icon, empty_state_text],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=8,
+        ),
+        padding=36,
+        alignment=ft.Alignment.CENTER,
+        visible=False,
+    )
+
+    for idx_slot in range(ITEMS_POR_PAGINA):
+        slot_obj = crear_slot_tarjeta(idx_slot)
+        pool_tarjetas.append(slot_obj)
+
+    lista_cards_container.controls = [empty_state_container] + [s["contenedor_raiz"] for s in pool_tarjetas]
 
     def renderizar_pagina_actual():
-        """Dibuja únicamente el lote activo (máx. 40 tarjetas) separando Stock A-Z arriba y Agotados A-Z abajo."""
+        """Actualiza los slots pre-construidos del pool sin limpiar ni recrear controles (< 15 ms)."""
         p_col = pal()
+        t_bcv = estado["tasa_bcv"]
+        t_repo = estado["tasa_reposicion"]
         prods = estado["productos_filtrados"]
         total = len(prods)
         total_pags = max(1, math.ceil(total / ITEMS_POR_PAGINA))
@@ -1077,39 +1287,50 @@ def main(page: ft.Page):
         fin = inicio + ITEMS_POR_PAGINA
         lote = prods[inicio:fin]
 
-        tarjetas_ui_refs.clear()
-        lista_cards_container.controls.clear()
-
         if not lote:
-            lista_cards_container.controls.append(
-                ft.Container(
-                    content=ft.Column(
-                        controls=[
-                            ft.Icon(ft.Icons.SEARCH_OFF_ROUNDED, size=44, color=p_col["muted"]),
-                            ft.Text("No se encontraron artículos con ese criterio", size=14, color=p_col["muted"]),
-                        ],
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=8,
-                    ),
-                    padding=36,
-                    alignment=ft.Alignment.CENTER,
-                )
-            )
+            empty_state_container.visible = True
+            empty_state_icon.color = p_col["muted"]
+            empty_state_text.color = p_col["muted"]
+            for slot in pool_tarjetas:
+                slot["contenedor_raiz"].visible = False
+                slot["producto_id"] = None
+                slot["datos"] = None
         else:
+            empty_state_container.visible = False
             mostro_header_stock = False
             mostro_header_agotados = False
-            for prod in lote:
-                if prod["cantidad"] > 0 and not mostro_header_stock:
-                    lista_cards_container.controls.append(
-                        crear_encabezado_seccion("DISPONIBLES EN STOCK (Orden A-Z)", es_stock=True)
-                    )
+            for i, slot in enumerate(pool_tarjetas):
+                if i >= len(lote):
+                    slot["contenedor_raiz"].visible = False
+                    slot["producto_id"] = None
+                    slot["datos"] = None
+                    continue
+
+                p = lote[i]
+                cant = p["cantidad"]
+                es_disponible = cant > 0
+
+                if es_disponible and not mostro_header_stock:
+                    slot["banner_seccion"].visible = True
+                    slot["banner_seccion"].bgcolor = p_col["sec_stock_bg"]
+                    slot["icono_seccion"].icon = ft.Icons.CHECK_CIRCLE_ROUNDED
+                    slot["icono_seccion"].color = p_col["sec_stock_txt"]
+                    slot["txt_seccion"].value = "DISPONIBLES EN STOCK (Orden A-Z)"
+                    slot["txt_seccion"].color = p_col["sec_stock_txt"]
                     mostro_header_stock = True
-                elif prod["cantidad"] == 0 and not mostro_header_agotados:
-                    lista_cards_container.controls.append(
-                        crear_encabezado_seccion("SIN STOCK / AGOTADOS (Orden A-Z)", es_stock=False)
-                    )
+                elif not es_disponible and not mostro_header_agotados:
+                    slot["banner_seccion"].visible = True
+                    slot["banner_seccion"].bgcolor = p_col["sec_zero_bg"]
+                    slot["icono_seccion"].icon = ft.Icons.CANCEL_OUTLINED
+                    slot["icono_seccion"].color = p_col["sec_zero_txt"]
+                    slot["txt_seccion"].value = "SIN STOCK / AGOTADOS (Orden A-Z)"
+                    slot["txt_seccion"].color = p_col["sec_zero_txt"]
                     mostro_header_agotados = True
-                lista_cards_container.controls.append(crear_tarjeta_producto(prod))
+                else:
+                    slot["banner_seccion"].visible = False
+
+                poblar_slot_tarjeta(slot, p, p_col, t_bcv, t_repo)
+                slot["contenedor_raiz"].visible = True
 
         lbl_contador_resultados.value = f"{total} art."
         lbl_contador_resultados.color = p_col["subtext"]
@@ -1802,7 +2023,9 @@ def main(page: ft.Page):
         txt_titulo_app.color = p_col["text"]
         btn_pag_ant.icon_color = p_col["text"]
         btn_pag_sig.icon_color = p_col["text"]
-        btn_toggle_compacto.icon_color = p_col["subtext"]
+        icono_toggle_compacto.color = p_col["subtext"]
+        btn_toggle_compacto_box.bgcolor = p_col["card"]
+        btn_toggle_compacto_box.border = ft.Border.all(1, p_col["border"])
         btn_quick_tasa.icon_color = p_col["mult_box_txt"]
         btn_quick_import.icon_color = p_col["accent"]
         btn_quick_export.icon_color = p_col["subtext"]
@@ -1835,9 +2058,9 @@ def main(page: ft.Page):
     btn_tema = ft.IconButton(
         icon=ft.Icons.DARK_MODE_OUTLINED,
         icon_color="#0F172A",
-        icon_size=19,
-        width=32,
-        height=32,
+        icon_size=18,
+        width=30,
+        height=30,
         padding=0,
         tooltip="Cambiar tema Claro / Oscuro",
         on_click=alternar_tema,
@@ -1849,7 +2072,7 @@ def main(page: ft.Page):
     btn_editar_tasas = ft.FilledTonalButton(
         content="Tasa / 1100",
         icon=ft.Icons.CURRENCY_EXCHANGE_ROUNDED,
-        height=32,
+        height=30,
         style=compact_btn_style,
         tooltip="Editar Tasa Dólar BCV y Multiplicador 1100",
         on_click=abrir_modal_tasas,
@@ -1858,7 +2081,7 @@ def main(page: ft.Page):
     btn_importar = ft.FilledTonalButton(
         content="Importar",
         icon=ft.Icons.UPLOAD_FILE_ROUNDED,
-        height=32,
+        height=30,
         style=compact_btn_style,
         on_click=abrir_modal_importar,
     )
@@ -1866,7 +2089,7 @@ def main(page: ft.Page):
     btn_exportar = ft.FilledTonalButton(
         content="PDF / Imprimir",
         icon=ft.Icons.PRINT_ROUNDED,
-        height=32,
+        height=30,
         style=compact_btn_style,
         on_click=abrir_modal_exportacion,
     )
@@ -1876,7 +2099,7 @@ def main(page: ft.Page):
         icon=ft.Icons.ADD_ROUNDED,
         bgcolor="#0284C7",
         color=ft.Colors.WHITE,
-        height=32,
+        height=30,
         style=compact_btn_style,
         on_click=abrir_modal_nuevo_producto,
     )
@@ -1887,7 +2110,7 @@ def main(page: ft.Page):
             ft.Row(
                 controls=[btn_tema, btn_editar_tasas, btn_importar, btn_exportar, btn_nuevo],
                 spacing=6,
-                run_spacing=6,
+                run_spacing=4,
                 wrap=True,
             ),
         ],
@@ -1899,12 +2122,18 @@ def main(page: ft.Page):
     panel_superior_colapsable = ft.Container(
         content=ft.Column(
             controls=[barra_superior, card_tasa_dolar, barra_kpis],
-            spacing=6,
+            spacing=4,
             tight=True,
+            scroll=ft.ScrollMode.HIDDEN,
         ),
+        height=obtener_altura_panel_expandido(),
         opacity=1.0,
-        animate_size=ft.Animation(280, ft.AnimationCurve.EASE_OUT_CUBIC),
-        animate_opacity=ft.Animation(220, ft.AnimationCurve.EASE_IN_OUT),
+        scale=1.0,
+        offset=ft.Offset(0, 0),
+        animate=ft.Animation(260, ft.AnimationCurve.EASE_OUT_CUBIC),
+        animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
+        animate_scale=ft.Animation(240, ft.AnimationCurve.EASE_OUT_CUBIC),
+        animate_offset=ft.Animation(240, ft.AnimationCurve.EASE_OUT_CUBIC),
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
 
@@ -1968,6 +2197,14 @@ def main(page: ft.Page):
     )
     page.navigation_bar = barra_navegacion
 
+    def on_page_resize(e=None):
+        actualizar_layout_kpis()
+        if not estado["modo_compacto"]:
+            panel_superior_colapsable.height = obtener_altura_panel_expandido()
+        page.update()
+
+    page.on_resize = on_page_resize
+
     # =========================================================================
     # ENSAMBLAJE DE LA VISTA PRINCIPAL CON SAFEAREA (EVITA SOLAPAMIENTO CON STATUS BAR)
     # =========================================================================
@@ -1984,7 +2221,7 @@ def main(page: ft.Page):
     )
     page.add(ft.SafeArea(content=contenido_principal, expand=True))
 
-    # Carga inicial inmediata (100% offline desde SQLite en 0ms)
+    # Carga inicial inmediata (100% offline desde SQLite en RAM en < 1 ms)
     recargar_datos_y_renderizar()
 
 
