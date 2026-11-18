@@ -22,6 +22,10 @@ import export_service
 database.seed_database()
 
 ITEMS_POR_PAGINA = 24
+APP_NOMBRE = "REM"
+APP_VERSION = "1.3.0"
+APP_AUTOR = "Jhon (JhonOcz1 / LiquidCCS)"
+APP_COPYRIGHT = "© 2026 REM • Jhon (LiquidCCS). Todos los derechos reservados."
 
 
 def main(page: ft.Page):
@@ -30,7 +34,7 @@ def main(page: ft.Page):
     # IMPORTANTE: NO usar page.horizontal_alignment = STRETCH ni Wrap + expand=True
     # para evitar RenderBox/ParentDataWidgetError (pantalla gris en Flutter).
     # =========================================================================
-    page.title = "Sistema de Inventario - LiquidCCS"
+    page.title = "REM - Sistema de Inventario v1.3"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.theme = ft.Theme(color_scheme_seed="#0284C7", use_material3=True)
     page.bgcolor = "#F8FAFC"
@@ -164,8 +168,22 @@ def main(page: ft.Page):
     # =========================================================================
     # PANEL DE TASAS Y MULTIPLICADOR GLOBAL (BCV + BASE 1100 EDITABLE)
     # =========================================================================
-    txt_titulo_app = ft.Text("Inventario Pro", size=17, weight=ft.FontWeight.BOLD, color="#0F172A")
-    icono_app = ft.Icon(ft.Icons.INVENTORY_ROUNDED, color="#0284C7", size=22)
+    txt_titulo_app = ft.Text(
+        APP_NOMBRE,
+        size=18,
+        weight=ft.FontWeight.BOLD,
+        color="#0F172A",
+        tooltip="REM v1.3 - Sistema de Gestión de Inventario",
+    )
+    icono_app = ft.Image(
+        src="icon.png",
+        width=28,
+        height=28,
+        border_radius=6,
+        fit=ft.BoxFit.CONTAIN,
+        tooltip="Logo oficial REM v1.3",
+        error_content=ft.Icon(ft.Icons.INVENTORY_ROUNDED, color="#0284C7", size=22),
+    )
 
     lbl_titulo_bcv = ft.Text("Tasa Dólar BCV", size=10, color="#64748B", weight=ft.FontWeight.W_500)
     lbl_titulo_mult = ft.Text("Multiplicador Global", size=10, color="#64748B", weight=ft.FontWeight.W_500)
@@ -297,7 +315,7 @@ def main(page: ft.Page):
             title=ft.Row(
                 [
                     ft.Row([ft.Icon(ft.Icons.TUNE_ROUNDED, color="#0284C7"), ft.Text("Editar Multiplicador y Tasa BCV", size=15, weight=ft.FontWeight.BOLD)], spacing=8),
-                    ft.IconButton(ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], on_click=cerrar),
+                    ft.IconButton(ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], tooltip="Cerrar ventana de tasas", on_click=cerrar),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
@@ -315,9 +333,9 @@ def main(page: ft.Page):
                         ft.Row(
                             controls=[
                                 ft.Text("Valores rápidos:", size=11, color=p_col["muted"]),
-                                ft.OutlinedButton(content="1100", on_click=lambda e: aplicar_preset_mult(1100.0)),
-                                ft.OutlinedButton(content="1150", on_click=lambda e: aplicar_preset_mult(1150.0)),
-                                ft.OutlinedButton(content="1200", on_click=lambda e: aplicar_preset_mult(1200.0)),
+                                ft.OutlinedButton(content="1100", tooltip="Aplicar multiplicador rápido 1.100,00 Bs.", on_click=lambda e: aplicar_preset_mult(1100.0)),
+                                ft.OutlinedButton(content="1150", tooltip="Aplicar multiplicador rápido 1.150,00 Bs.", on_click=lambda e: aplicar_preset_mult(1150.0)),
+                                ft.OutlinedButton(content="1200", tooltip="Aplicar multiplicador rápido 1.200,00 Bs.", on_click=lambda e: aplicar_preset_mult(1200.0)),
                             ],
                             spacing=6,
                             wrap=True,
@@ -336,9 +354,10 @@ def main(page: ft.Page):
                             bgcolor="#0284C7",
                             color=ft.Colors.WHITE,
                             height=44,
+                            tooltip="Guardar tasas y recalcular todo el catálogo",
                             on_click=guardar_tasas,
                         ),
-                        ft.TextButton(content="Cancelar", on_click=cerrar),
+                        ft.TextButton(content="Cancelar", tooltip="Cerrar sin guardar cambios", on_click=cerrar),
                     ],
                     spacing=10,
                     scroll=ft.ScrollMode.ADAPTIVE,
@@ -461,6 +480,7 @@ def main(page: ft.Page):
         scale=1.0,
         animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
         animate_scale=ft.Animation(180, ft.AnimationCurve.EASE_OUT_CUBIC),
+        tooltip="Panel de Tasa Oficial BCV y Multiplicador Global. Usa el botón de recarga para actualizar desde Internet.",
         on_hover=on_hover_tasa_card,
     )
 
@@ -475,7 +495,7 @@ def main(page: ft.Page):
     kpi_containers = []
     kpi_titulos = []
 
-    def kpi_box(titulo: str, txt_control: ft.Text, icon_name, color_accent: str, on_click_cb=None):
+    def kpi_box(titulo: str, txt_control: ft.Text, icon_name, color_accent: str, on_click_cb=None, tooltip_txt: str = ""):
         lbl_t = ft.Text(titulo, size=10, color="#64748B", weight=ft.FontWeight.W_500)
         kpi_titulos.append(lbl_t)
         cont = ft.Container(
@@ -496,6 +516,7 @@ def main(page: ft.Page):
             animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
             animate_scale=ft.Animation(180, ft.AnimationCurve.EASE_OUT_CUBIC),
             ink=True,
+            tooltip=tooltip_txt,
             on_click=on_click_cb,
         )
 
@@ -516,6 +537,7 @@ def main(page: ft.Page):
         ft.Icons.CATEGORY_OUTLINED,
         "#0284C7",
         on_click_cb=lambda e: cambiar_filtro_categoria("todos"),
+        tooltip_txt="Total de artículos registrados (toca para ver todos de la A a la Z)",
     )
     kpi_unidades = kpi_box(
         "Unidades Stock",
@@ -523,6 +545,7 @@ def main(page: ft.Page):
         ft.Icons.INVENTORY_2_OUTLINED,
         "#059669",
         on_click_cb=lambda e: cambiar_filtro_categoria("stock"),
+        tooltip_txt="Suma total de unidades físicas en existencia (toca para filtrar con stock)",
     )
     kpi_stock = kpi_box(
         "Con Stock (>0)",
@@ -530,6 +553,7 @@ def main(page: ft.Page):
         ft.Icons.CHECK_CIRCLE_OUTLINE,
         "#0284C7",
         on_click_cb=lambda e: cambiar_filtro_categoria("stock"),
+        tooltip_txt="Productos disponibles frente al catálogo total (toca para filtrar disponibles)",
     )
     kpi_valor = kpi_box(
         "Valor Ajust. BCV",
@@ -537,6 +561,7 @@ def main(page: ft.Page):
         ft.Icons.PAYMENTS_OUTLINED,
         "#7C3AED",
         on_click_cb=abrir_modal_tasas,
+        tooltip_txt="Valor total del stock ajustado a tasa BCV (toca para editar tasas)",
     )
 
     barra_kpis = ft.Column(controls=[], spacing=5)
@@ -610,7 +635,7 @@ def main(page: ft.Page):
             icon_size=16,
             padding=0,
             on_click=limpiar_busqueda,
-            tooltip="Limpiar búsqueda",
+            tooltip="Limpiar búsqueda actual",
         ),
         bgcolor=ft.Colors.WHITE,
         border_color="#94A3B8",
@@ -620,6 +645,7 @@ def main(page: ft.Page):
         text_size=13,
         height=42,
         expand=True,
+        tooltip="Buscar artículos por nombre, característica, código SKU o ubicación",
         on_change=on_busqueda_change,
     )
 
@@ -630,7 +656,7 @@ def main(page: ft.Page):
         width=32,
         height=32,
         padding=0,
-        tooltip="Editar Tasa BCV / 1100",
+        tooltip="Editar Tasa BCV / Multiplicador 1100",
         on_click=lambda e: abrir_modal_tasas(e),
     )
     btn_quick_import = ft.IconButton(
@@ -640,7 +666,7 @@ def main(page: ft.Page):
         width=32,
         height=32,
         padding=0,
-        tooltip="Importar artículos",
+        tooltip="Importar artículos desde CSV, SVG o TXT",
         on_click=lambda e: abrir_modal_importar(e),
     )
     btn_quick_export = ft.IconButton(
@@ -650,13 +676,23 @@ def main(page: ft.Page):
         width=32,
         height=32,
         padding=0,
-        tooltip="Exportar / Imprimir PDF",
+        tooltip="Exportar o imprimir reporte PDF / HTML",
         on_click=lambda e: abrir_modal_exportacion(e),
+    )
+    btn_quick_info = ft.IconButton(
+        icon=ft.Icons.INFO_OUTLINE_ROUNDED,
+        icon_color="#0284C7",
+        icon_size=18,
+        width=32,
+        height=32,
+        padding=0,
+        tooltip="Acerca de REM v1.3 (Autor, Copyright y Versión)",
+        on_click=lambda e: abrir_modal_acerca_de(e),
     )
 
     modulos_accesibles_compactos = ft.Container(
         content=ft.Row(
-            controls=[btn_quick_tasa, btn_quick_import, btn_quick_export],
+            controls=[btn_quick_tasa, btn_quick_import, btn_quick_export, btn_quick_info],
             spacing=2,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
@@ -680,7 +716,7 @@ def main(page: ft.Page):
         panel_superior_colapsable.scale = 0.96 if compacto else 1.0
         panel_superior_colapsable.offset = ft.Offset(0, -0.05) if compacto else ft.Offset(0, 0)
 
-        modulos_accesibles_compactos.width = 104 if compacto else 0
+        modulos_accesibles_compactos.width = 138 if compacto else 0
         modulos_accesibles_compactos.opacity = 1.0 if compacto else 0.0
         badge_resumen_compacto.visible = compacto
 
@@ -781,6 +817,7 @@ def main(page: ft.Page):
         scale=1.0,
         animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
         animate_scale=ft.Animation(160, ft.AnimationCurve.EASE_OUT_CUBIC),
+        tooltip="Mostrar todo el inventario (orden A-Z con stock primero)",
         on_click=lambda e: cambiar_filtro_categoria("todos"),
         ink=True,
     )
@@ -795,6 +832,7 @@ def main(page: ft.Page):
         scale=1.0,
         animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
         animate_scale=ft.Animation(160, ft.AnimationCurve.EASE_OUT_CUBIC),
+        tooltip="Filtrar únicamente artículos disponibles en stock (> 0)",
         on_click=lambda e: cambiar_filtro_categoria("stock"),
         ink=True,
     )
@@ -809,9 +847,11 @@ def main(page: ft.Page):
         scale=1.0,
         animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
         animate_scale=ft.Animation(160, ft.AnimationCurve.EASE_OUT_CUBIC),
+        tooltip="Filtrar únicamente artículos agotados (stock = 0)",
         on_click=lambda e: cambiar_filtro_categoria("agotados"),
         ink=True,
     )
+    btn_chip_agotados.on_hover = crear_hover_chip(btn_chip_agotados, "agotados")
 
     lbl_contador_resultados = ft.Text("", size=11, color="#475569", weight=ft.FontWeight.W_600)
 
@@ -955,12 +995,13 @@ def main(page: ft.Page):
                 width=obtener_ancho_modal(),
             ),
             actions=[
-                ft.TextButton(content="Cancelar", on_click=cancelar),
+                ft.TextButton(content="Cancelar", tooltip="Cancelar y conservar el artículo", on_click=cancelar),
                 ft.FilledButton(
                     content="Eliminar",
                     icon=ft.Icons.DELETE_FOREVER_ROUNDED,
                     bgcolor="#DC2626",
                     color=ft.Colors.WHITE,
+                    tooltip="Confirmar y eliminar permanentemente de SQLite",
                     on_click=ejecutar_eliminacion,
                 ),
             ],
@@ -992,6 +1033,7 @@ def main(page: ft.Page):
             bgcolor="#DBEAFE",
             border_radius=6,
             padding=ft.Padding.symmetric(horizontal=8, vertical=3),
+            tooltip="Código SKU identificador del artículo",
         )
 
         txt_stock = ft.Text("", size=11, weight=ft.FontWeight.BOLD, color="#15803D")
@@ -1000,6 +1042,7 @@ def main(page: ft.Page):
             bgcolor="#DCFCE7",
             border_radius=6,
             padding=ft.Padding.symmetric(horizontal=8, vertical=3),
+            tooltip="Disponibilidad actual en inventario",
         )
 
         txt_ubic = ft.Text("", size=11, weight=ft.FontWeight.W_600, color="#6B21A8")
@@ -1008,6 +1051,7 @@ def main(page: ft.Page):
             bgcolor="#F3E8FF",
             border_radius=6,
             padding=ft.Padding.symmetric(horizontal=8, vertical=3),
+            tooltip="Ubicación física o responsable asignado",
             visible=False,
         )
 
@@ -1015,14 +1059,14 @@ def main(page: ft.Page):
             content="Editar",
             icon=ft.Icons.EDIT_OUTLINED,
             icon_color="#0284C7",
-            tooltip="Editar artículo",
+            tooltip="Editar nombre, precio, stock o ubicación de este artículo",
             on_click=lambda e, s=slot: abrir_modal_detalle(s["producto_id"]) if s["producto_id"] else None,
         )
         btn_eliminar = ft.TextButton(
             content="Eliminar",
             icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
             icon_color="#DC2626",
-            tooltip="Eliminar artículo",
+            tooltip="Eliminar permanentemente este artículo del inventario",
             on_click=lambda e, s=slot: confirmar_eliminar_producto(s["producto_id"]) if s["producto_id"] else None,
         )
 
@@ -1038,6 +1082,7 @@ def main(page: ft.Page):
             content=ft.Column(controls=[lbl_precio_venta, txt_precio_venta, txt_costo], spacing=1),
             padding=6,
             expand=True,
+            tooltip="Precio base de venta en divisas ($) y costo unitario",
         )
 
         # Bloque 2: Multiplicación (USD × 1100 o valor global)
@@ -1051,19 +1096,25 @@ def main(page: ft.Page):
             border_radius=8,
             padding=6,
             expand=True,
+            tooltip="Monto total en Bolívares calculado con el multiplicador global",
         )
 
-        # Bloque 3: Precio Ajustado BCV ($) y Bs a BCV directo
+        # Bloque 3: Precio Ajustado BCV ($)
         lbl_bcv_titulo = ft.Text("AJUSTADO BCV ($)", size=10, color="#047857", weight=ft.FontWeight.BOLD)
         txt_bcv_usd = ft.Text("", size=14, weight=ft.FontWeight.BOLD, color="#047857")
-        txt_bcv_dir = ft.Text("", size=10, color="#64748B")
         box_bcv = ft.Container(
-            content=ft.Column(controls=[lbl_bcv_titulo, txt_bcv_usd, txt_bcv_dir], spacing=1),
+            content=ft.Column(
+                controls=[lbl_bcv_titulo, txt_bcv_usd],
+                spacing=2,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
             bgcolor="#ECFDF5",
             border=ft.Border.all(1, "#6EE7B7"),
             border_radius=8,
             padding=6,
             expand=True,
+            alignment=ft.Alignment.CENTER_LEFT,
+            tooltip="Precio ajustado en dólares referido a tasa BCV según el multiplicador global",
         )
 
         # Bloque 4: Control rápido de stock (- / +)
@@ -1073,14 +1124,14 @@ def main(page: ft.Page):
             icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
             icon_color="#64748B",
             icon_size=22,
-            tooltip="Restar 1 unidad",
+            tooltip="Restar 1 unidad al stock actual",
             on_click=lambda e, s=slot: ajustar_stock_rapido_slot(s, -1),
         )
         btn_mas = ft.IconButton(
             icon=ft.Icons.ADD_CIRCLE_OUTLINE,
             icon_color="#0284C7",
             icon_size=22,
-            tooltip="Sumar 1 unidad",
+            tooltip="Sumar 1 unidad al stock actual",
             on_click=lambda e, s=slot: ajustar_stock_rapido_slot(s, 1),
         )
         col_stock_ctrl = ft.Container(
@@ -1174,7 +1225,6 @@ def main(page: ft.Page):
                 "box_bcv": box_bcv,
                 "lbl_bcv_titulo": lbl_bcv_titulo,
                 "txt_bcv_usd": txt_bcv_usd,
-                "txt_bcv_dir": txt_bcv_dir,
                 "lbl_stock_titulo": lbl_stock_titulo,
                 "txt_cant_rapida": txt_cant_rapida,
                 "btn_menos": btn_menos,
@@ -1237,8 +1287,6 @@ def main(page: ft.Page):
         slot["lbl_bcv_titulo"].color = color_bcv
         slot["txt_bcv_usd"].value = precios["precio_venta_bcv_usd_str"]
         slot["txt_bcv_usd"].color = color_bcv
-        slot["txt_bcv_dir"].value = f"BCV Directo: {precios['monto_bs_bcv_directo_str']}"
-        slot["txt_bcv_dir"].color = p_col["muted"]
         slot["box_bcv"].bgcolor = p_col["bcv_box_bg"] if precios["tiene_precio"] else p_col["card_sec"]
         slot["box_bcv"].border = ft.Border.all(1, p_col["bcv_box_border"] if precios["tiene_precio"] else p_col["border"])
 
@@ -1389,7 +1437,7 @@ def main(page: ft.Page):
                 txt_preview_calc.value = (
                     f"Precio Venta: {c['precio_base_str']} | "
                     f"Mult. ({estado['tasa_reposicion']:,.0f}): {c['monto_bs_reposicion_str']}\n"
-                    f"Ajustado BCV: {c['precio_venta_bcv_usd_str']} | BCV Directo: {c['monto_bs_bcv_directo_str']}"
+                    f"Ajustado BCV: {c['precio_venta_bcv_usd_str']}"
                 )
             else:
                 txt_preview_calc.value = "Vista previa: Sin precio"
@@ -1444,7 +1492,7 @@ def main(page: ft.Page):
             title=ft.Row(
                 [
                     ft.Row([ft.Icon(ft.Icons.ADD_BOX_ROUNDED, color="#059669"), ft.Text("Nuevo Artículo", size=16, weight=ft.FontWeight.BOLD)], spacing=8),
-                    ft.IconButton(icon=ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], tooltip="Cerrar", on_click=cerrar_dialogo),
+                    ft.IconButton(icon=ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], tooltip="Cerrar ventana de nuevo artículo", on_click=cerrar_dialogo),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
@@ -1470,9 +1518,10 @@ def main(page: ft.Page):
                             bgcolor="#059669",
                             color=ft.Colors.WHITE,
                             height=44,
+                            tooltip="Registrar el nuevo artículo en el inventario",
                             on_click=guardar_nuevo_articulo,
                         ),
-                        ft.TextButton(content="Cancelar", on_click=cerrar_dialogo),
+                        ft.TextButton(content="Cancelar", tooltip="Descartar y cerrar", on_click=cerrar_dialogo),
                     ],
                     spacing=10,
                     scroll=ft.ScrollMode.ADAPTIVE,
@@ -1543,7 +1592,7 @@ def main(page: ft.Page):
                 lbl_info_arbitraje.value = (
                     f"Precio Venta: {c['precio_base_str']} | "
                     f"Mult. ({estado['tasa_reposicion']:,.0f}): {c['monto_bs_reposicion_str']}\n"
-                    f"Ajustado BCV: {c['precio_venta_bcv_usd_str']} | BCV Directo: {c['monto_bs_bcv_directo_str']}"
+                    f"Ajustado BCV: {c['precio_venta_bcv_usd_str']}"
                 )
             else:
                 lbl_info_arbitraje.value = "Sin precio configurado"
@@ -1597,7 +1646,7 @@ def main(page: ft.Page):
             title=ft.Row(
                 [
                     ft.Row([ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, color="#0284C7"), ft.Text(f"Editar: {p['sku']}", size=16, weight=ft.FontWeight.BOLD)], spacing=8),
-                    ft.IconButton(icon=ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], tooltip="Cerrar", on_click=cerrar_dialogo),
+                    ft.IconButton(icon=ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], tooltip="Cerrar ventana de edición", on_click=cerrar_dialogo),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
@@ -1623,6 +1672,7 @@ def main(page: ft.Page):
                             bgcolor="#0284C7",
                             color=ft.Colors.WHITE,
                             height=44,
+                            tooltip="Guardar las modificaciones de este artículo",
                             on_click=guardar_cambios,
                         ),
                         ft.Row(
@@ -1631,9 +1681,10 @@ def main(page: ft.Page):
                                     content="Eliminar Artículo",
                                     icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
                                     icon_color="#DC2626",
+                                    tooltip="Eliminar este artículo del inventario",
                                     on_click=eliminar_desde_modal,
                                 ),
-                                ft.TextButton(content="Cancelar", on_click=cerrar_dialogo),
+                                ft.TextButton(content="Cancelar", tooltip="Cerrar sin guardar cambios", on_click=cerrar_dialogo),
                             ],
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
@@ -1691,7 +1742,7 @@ def main(page: ft.Page):
             title=ft.Row(
                 [
                     ft.Row([ft.Icon(ft.Icons.DESCRIPTION_ROUNDED, color="#0284C7"), ft.Text("Plantilla de Importación", size=15, weight=ft.FontWeight.BOLD)], spacing=8),
-                    ft.IconButton(ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], tooltip="Cerrar", on_click=lambda x: page.pop_dialog()),
+                    ft.IconButton(ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], tooltip="Cerrar vista de plantilla", on_click=lambda x: page.pop_dialog()),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
@@ -1707,12 +1758,18 @@ def main(page: ft.Page):
                         txt_codigo,
                         ft.Row(
                             controls=[
-                                ft.FilledTonalButton(content="Descargar CSV", icon=ft.Icons.DOWNLOAD_ROUNDED, on_click=descargar_plantilla),
+                                ft.FilledTonalButton(
+                                    content="Descargar CSV",
+                                    icon=ft.Icons.DOWNLOAD_ROUNDED,
+                                    tooltip="Guardar archivo plantilla_inventario.csv en la carpeta de exportaciones",
+                                    on_click=descargar_plantilla,
+                                ),
                                 ft.FilledButton(
                                     content="Cargar en Editor",
                                     icon=ft.Icons.INPUT_ROUNDED,
                                     bgcolor="#0284C7",
                                     color=ft.Colors.WHITE,
+                                    tooltip="Copiar plantilla de ejemplo al campo de texto de importación",
                                     on_click=copiar_al_editor,
                                     visible=(campo_texto_destino is not None),
                                 ),
@@ -1815,7 +1872,7 @@ def main(page: ft.Page):
             title=ft.Row(
                 [
                     ft.Row([ft.Icon(ft.Icons.FILE_UPLOAD_ROUNDED, color="#0284C7"), ft.Text("Importar Artículos", size=16, weight=ft.FontWeight.BOLD)], spacing=8),
-                    ft.IconButton(icon=ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], tooltip="Cerrar", on_click=lambda x: page.pop_dialog()),
+                    ft.IconButton(icon=ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], tooltip="Cerrar ventana de importación", on_click=lambda x: page.pop_dialog()),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
@@ -1824,8 +1881,18 @@ def main(page: ft.Page):
                     controls=[
                         ft.Row(
                             controls=[
-                                ft.OutlinedButton(content="Ver Plantilla", icon=ft.Icons.VISIBILITY_OUTLINED, on_click=lambda x: abrir_modal_plantilla(txt_import_input)),
-                                ft.OutlinedButton(content="Descargar CSV", icon=ft.Icons.DOWNLOAD_ROUNDED, on_click=descargar_plantilla_directa),
+                                ft.OutlinedButton(
+                                    content="Ver Plantilla",
+                                    icon=ft.Icons.VISIBILITY_OUTLINED,
+                                    tooltip="Visualizar la estructura y ejemplo de plantilla CSV",
+                                    on_click=lambda x: abrir_modal_plantilla(txt_import_input),
+                                ),
+                                ft.OutlinedButton(
+                                    content="Descargar CSV",
+                                    icon=ft.Icons.DOWNLOAD_ROUNDED,
+                                    tooltip="Descargar plantilla base .csv en tu dispositivo",
+                                    on_click=descargar_plantilla_directa,
+                                ),
                             ],
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                             wrap=True,
@@ -1835,6 +1902,7 @@ def main(page: ft.Page):
                             content="Seleccionar Archivo (.csv, .svg, .txt)",
                             icon=ft.Icons.FOLDER_OPEN_ROUNDED,
                             height=42,
+                            tooltip="Explorar archivos del dispositivo para cargar productos masivamente",
                             on_click=seleccionar_archivo_click,
                         ),
                         ft.Text("O pegar contenido directamente:", size=11, color=p_col["muted"], weight=ft.FontWeight.W_500),
@@ -1846,9 +1914,10 @@ def main(page: ft.Page):
                             bgcolor="#059669",
                             color=ft.Colors.WHITE,
                             height=44,
+                            tooltip="Importar y actualizar artículos en la base de datos SQLite",
                             on_click=ejecutar_importacion_texto,
                         ),
-                        ft.TextButton(content="Cancelar", on_click=lambda x: page.pop_dialog()),
+                        ft.TextButton(content="Cancelar", tooltip="Cerrar sin importar", on_click=lambda x: page.pop_dialog()),
                     ],
                     spacing=10,
                     scroll=ft.ScrollMode.ADAPTIVE,
@@ -1915,7 +1984,7 @@ def main(page: ft.Page):
             dlg_txt = ft.AlertDialog(
                 title=ft.Text("Listado de Inventario para Copiar / Imprimir", size=15, weight=ft.FontWeight.BOLD),
                 content=ft.Container(content=campo_texto, width=obtener_ancho_modal()),
-                actions=[ft.TextButton(content="Cerrar", on_click=lambda x: page.pop_dialog())],
+                actions=[ft.TextButton(content="Cerrar", tooltip="Cerrar vista de texto", on_click=lambda x: page.pop_dialog())],
             )
             page.show_dialog(dlg_txt)
 
@@ -1952,6 +2021,7 @@ def main(page: ft.Page):
                             border=ft.Border.all(1, p_col["border"]),
                             border_radius=8,
                             padding=10,
+                            tooltip="Exportar inventario listado a un archivo PDF listo para imprimir",
                             on_click=generar_y_abrir_pdf,
                             ink=True,
                         ),
@@ -1974,6 +2044,7 @@ def main(page: ft.Page):
                             border=ft.Border.all(1, p_col["border"]),
                             border_radius=8,
                             padding=10,
+                            tooltip="Abrir reporte HTML limpio en el navegador para impresión directa",
                             on_click=generar_y_abrir_html,
                             ink=True,
                         ),
@@ -1996,6 +2067,7 @@ def main(page: ft.Page):
                             border=ft.Border.all(1, p_col["border"]),
                             border_radius=8,
                             padding=10,
+                            tooltip="Mostrar listado en pantalla para copiar o compartir en móvil",
                             on_click=ver_listado_texto_imprimible,
                             ink=True,
                         ),
@@ -2006,7 +2078,154 @@ def main(page: ft.Page):
                 ),
                 width=obtener_ancho_modal(),
             ),
-            actions=[ft.TextButton(content="Cerrar", on_click=lambda ev: page.pop_dialog())],
+            actions=[ft.TextButton(content="Cerrar", tooltip="Cerrar ventana de exportación", on_click=lambda ev: page.pop_dialog())],
+        )
+        page.show_dialog(dlg)
+
+    # =========================================================================
+    # MODAL 4: ACERCA DE REM (INFORMACIÓN, AUTOR, COPYRIGHT Y VERSIÓN)
+    # =========================================================================
+    def abrir_modal_acerca_de(e=None):
+        p_col = pal()
+
+        def cerrar(ev):
+            page.pop_dialog()
+            page.update()
+
+        def fila_dato(etiqueta: str, valor: str, icono):
+            return ft.Row(
+                controls=[
+                    ft.Icon(icono, color=p_col["accent"], size=18),
+                    ft.Column(
+                        controls=[
+                            ft.Text(etiqueta, size=10, color=p_col["muted"], weight=ft.FontWeight.W_600),
+                            ft.Text(valor, size=12, color=p_col["text"], weight=ft.FontWeight.W_600),
+                        ],
+                        spacing=1,
+                        expand=True,
+                    ),
+                ],
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+
+        dlg = ft.AlertDialog(
+            title=ft.Row(
+                [
+                    ft.Row(
+                        [
+                            ft.Icon(ft.Icons.INFO_OUTLINE_ROUNDED, color="#0284C7"),
+                            ft.Text("Acerca de REM", size=16, weight=ft.FontWeight.BOLD),
+                        ],
+                        spacing=8,
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.CLOSE_ROUNDED,
+                        icon_color=p_col["muted"],
+                        tooltip="Cerrar ventana",
+                        on_click=cerrar,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Column(
+                            controls=[
+                                ft.Container(
+                                    content=ft.Image(
+                                        src="icon.png",
+                                        width=72,
+                                        height=72,
+                                        border_radius=14,
+                                        fit=ft.BoxFit.CONTAIN,
+                                        error_content=ft.Icon(ft.Icons.INVENTORY_ROUNDED, color="#0284C7", size=48),
+                                    ),
+                                    border=ft.Border.all(1, p_col["border"]),
+                                    border_radius=16,
+                                    padding=4,
+                                ),
+                                ft.Text(APP_NOMBRE, size=20, weight=ft.FontWeight.BOLD, color=p_col["text"]),
+                                ft.Text("Sistema Inteligente de Gestión de Inventario", size=12, color=p_col["subtext"]),
+                                ft.Container(
+                                    content=ft.Text(
+                                        f"Versión 1.3 (Build {APP_VERSION})",
+                                        size=11,
+                                        weight=ft.FontWeight.BOLD,
+                                        color=p_col["sku_txt"],
+                                    ),
+                                    bgcolor=p_col["sku_bg"],
+                                    border_radius=12,
+                                    padding=ft.Padding.symmetric(horizontal=10, vertical=3),
+                                ),
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=4,
+                        ),
+                        ft.Container(
+                            content=ft.Column(
+                                controls=[
+                                    fila_dato("Aplicación", "REM - Inventario & Arbitraje Cambiario", ft.Icons.APPS_ROUNDED),
+                                    fila_dato("Versión del Sistema", f"v{APP_VERSION} (Android APK & PC Desktop)", ft.Icons.NEW_RELEASES_OUTLINED),
+                                    fila_dato("Autor / Propietario", APP_AUTOR, ft.Icons.PERSON_OUTLINE_ROUNDED),
+                                    fila_dato("Motor y Tecnología", "Python 3 • Flet Material 3 • SQLite3 Offline • DolarApi BCV", ft.Icons.MEMORY_ROUNDED),
+                                ],
+                                spacing=8,
+                            ),
+                            bgcolor=p_col["card_sec"],
+                            border=ft.Border.all(1, p_col["border"]),
+                            border_radius=10,
+                            padding=10,
+                        ),
+                        ft.Container(
+                            content=ft.Column(
+                                controls=[
+                                    ft.Row(
+                                        [
+                                            ft.Icon(ft.Icons.COPYRIGHT_ROUNDED, color=p_col["bcv_box_txt"], size=16),
+                                            ft.Text("Derechos de Autor y Copyright", size=11, weight=ft.FontWeight.BOLD, color=p_col["bcv_box_txt"]),
+                                        ],
+                                        spacing=6,
+                                    ),
+                                    ft.Text(
+                                        f"Copyright {APP_COPYRIGHT}",
+                                        size=11,
+                                        weight=ft.FontWeight.W_600,
+                                        color=p_col["text"],
+                                    ),
+                                    ft.Text(
+                                        "El software, su base de datos, diseño e identidad visual R·E·M "
+                                        "están protegidos por derechos de autor para uso exclusivo autorizado.",
+                                        size=11,
+                                        color=p_col["muted"],
+                                    ),
+                                ],
+                                spacing=4,
+                            ),
+                            bgcolor=p_col["bcv_box_bg"],
+                            border=ft.Border.all(1, p_col["bcv_box_border"]),
+                            border_radius=10,
+                            padding=10,
+                        ),
+                        ft.FilledButton(
+                            content="Cerrar",
+                            icon=ft.Icons.CHECK_ROUNDED,
+                            bgcolor="#0284C7",
+                            color=ft.Colors.WHITE,
+                            height=42,
+                            tooltip="Cerrar pestaña Acerca de",
+                            on_click=cerrar,
+                        ),
+                    ],
+                    spacing=10,
+                    scroll=ft.ScrollMode.ADAPTIVE,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                ),
+                width=obtener_ancho_modal(),
+                padding=ft.Padding.only(top=4, bottom=6),
+            ),
+            actions=[],
         )
         page.show_dialog(dlg)
 
@@ -2029,6 +2248,7 @@ def main(page: ft.Page):
         btn_quick_tasa.icon_color = p_col["mult_box_txt"]
         btn_quick_import.icon_color = p_col["accent"]
         btn_quick_export.icon_color = p_col["subtext"]
+        btn_quick_info.icon_color = p_col["accent"]
 
         card_tasa_dolar.bgcolor = p_col["card"]
         card_tasa_dolar.border = ft.Border.all(1, p_col["border"])
@@ -2051,7 +2271,7 @@ def main(page: ft.Page):
         renderizar_pagina_actual()
 
     compact_btn_style = ft.ButtonStyle(
-        padding=ft.Padding.symmetric(horizontal=8, vertical=0),
+        padding=ft.Padding.symmetric(horizontal=7, vertical=0),
         text_style=ft.TextStyle(size=11, weight=ft.FontWeight.W_600),
     )
 
@@ -2062,7 +2282,7 @@ def main(page: ft.Page):
         width=30,
         height=30,
         padding=0,
-        tooltip="Cambiar tema Claro / Oscuro",
+        tooltip="Alternar entre tema Claro y tema Oscuro",
         on_click=alternar_tema,
     )
 
@@ -2074,7 +2294,7 @@ def main(page: ft.Page):
         icon=ft.Icons.CURRENCY_EXCHANGE_ROUNDED,
         height=30,
         style=compact_btn_style,
-        tooltip="Editar Tasa Dólar BCV y Multiplicador 1100",
+        tooltip="Editar Tasa Dólar BCV y Multiplicador Global (1100)",
         on_click=abrir_modal_tasas,
     )
 
@@ -2083,6 +2303,7 @@ def main(page: ft.Page):
         icon=ft.Icons.UPLOAD_FILE_ROUNDED,
         height=30,
         style=compact_btn_style,
+        tooltip="Importar productos masivamente desde CSV, SVG o TXT",
         on_click=abrir_modal_importar,
     )
 
@@ -2091,6 +2312,7 @@ def main(page: ft.Page):
         icon=ft.Icons.PRINT_ROUNDED,
         height=30,
         style=compact_btn_style,
+        tooltip="Exportar o imprimir el listado de inventario en PDF / HTML",
         on_click=abrir_modal_exportacion,
     )
 
@@ -2101,15 +2323,25 @@ def main(page: ft.Page):
         color=ft.Colors.WHITE,
         height=30,
         style=compact_btn_style,
+        tooltip="Registrar un nuevo artículo en el inventario",
         on_click=abrir_modal_nuevo_producto,
+    )
+
+    btn_acerca_de = ft.FilledTonalButton(
+        content="Acerca de",
+        icon=ft.Icons.INFO_OUTLINE_ROUNDED,
+        height=30,
+        style=compact_btn_style,
+        tooltip="Acerca de REM: información del sistema, autor, copyright y versión v1.3",
+        on_click=abrir_modal_acerca_de,
     )
 
     barra_superior = ft.Row(
         controls=[
             ft.Row(controls=[icono_app, txt_titulo_app], spacing=6),
             ft.Row(
-                controls=[btn_tema, btn_editar_tasas, btn_importar, btn_exportar, btn_nuevo],
-                spacing=6,
+                controls=[btn_tema, btn_editar_tasas, btn_importar, btn_exportar, btn_nuevo, btn_acerca_de],
+                spacing=5,
                 run_spacing=4,
                 wrap=True,
             ),
@@ -2172,25 +2404,30 @@ def main(page: ft.Page):
                 icon=ft.Icons.INVENTORY_2_OUTLINED,
                 selected_icon=ft.Icons.INVENTORY_2_ROUNDED,
                 label="Inventario",
+                tooltip="Ver todo el catálogo de productos ordenado de la A a la Z",
             ),
             ft.NavigationBarDestination(
                 icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
                 selected_icon=ft.Icons.CHECK_CIRCLE_ROUNDED,
                 label="Con Stock",
+                tooltip="Mostrar únicamente productos disponibles con existencias > 0",
             ),
             ft.NavigationBarDestination(
                 icon=ft.Icons.ADD_CIRCLE_OUTLINE_ROUNDED,
                 selected_icon=ft.Icons.ADD_CIRCLE_ROUNDED,
                 label="Nuevo",
+                tooltip="Crear y guardar un nuevo artículo en REM",
             ),
             ft.NavigationBarDestination(
                 icon=ft.Icons.CURRENCY_EXCHANGE_ROUNDED,
                 label="Tasa / 1100",
+                tooltip="Configurar Tasa Dólar BCV y Multiplicador Global",
             ),
             ft.NavigationBarDestination(
                 icon=ft.Icons.PRINT_OUTLINED,
                 selected_icon=ft.Icons.PRINT_ROUNDED,
                 label="Imprimir",
+                tooltip="Exportar listado de inventario a PDF, HTML o texto",
             ),
         ],
         on_change=on_nav_change,
@@ -2226,4 +2463,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.run(main, assets_dir="assets")
