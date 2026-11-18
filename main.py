@@ -1,7 +1,8 @@
 """
 main.py - Aplicación Móvil (Android APK) y de Escritorio (PC) de Inventario con Python, SQLite y Flet
 Implementa Material 3 adaptable (Claro/Oscuro), cálculo dinámico de arbitraje cambiario
-(Tasa BCV y Tasa de Reposición), persistencia Android segura y gestión CRUD completa.
+(Tasa BCV y Multiplicador Global editable 1100/1200), orden A-Z (Stock primero),
+descripción corta automática de características y persistencia Android segura.
 """
 
 import os
@@ -25,11 +26,12 @@ ITEMS_POR_PAGINA = 40
 def main(page: ft.Page):
     # =========================================================================
     # CONFIGURACIÓN DE PÁGINA Y TEMA MATERIAL 3 ADAPTABLE
+    # IMPORTANTE: NO usar page.horizontal_alignment = STRETCH ni Wrap + expand=True
+    # para evitar RenderBox/ParentDataWidgetError (pantalla gris en Flutter).
     # =========================================================================
     page.title = "Sistema de Inventario - LiquidCCS"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.theme = ft.Theme(color_scheme_seed="#0284C7", use_material3=True)
-    page.horizontal_alignment = ft.CrossAxisAlignment.STRETCH
     page.bgcolor = "#F8FAFC"
     page.padding = 12
     page.spacing = 10
@@ -58,8 +60,7 @@ def main(page: ft.Page):
     # Referencias en memoria para actualización instantánea (+/-) sin reconstruir lista completa
     tarjetas_ui_refs: Dict[int, Dict[str, Any]] = {}
 
-    # IMPORTANTE Flet 1.1.2: FilePicker es un Service y se auto-registra al instanciarlo;
-    # NO debe añadirse a page.overlay (causaría "Unknown control: FilePicker").
+    # Flet 1.1.2: FilePicker es un Service y se auto-registra; NO añadir a page.overlay
     file_picker = ft.FilePicker()
 
     def pal() -> Dict[str, str]:
@@ -79,6 +80,9 @@ def main(page: ft.Page):
                 "bcv_box_bg": "#064E3B",
                 "bcv_box_border": "#059669",
                 "bcv_box_txt": "#6EE7B7",
+                "mult_box_bg": "#451A03",
+                "mult_box_border": "#D97706",
+                "mult_box_txt": "#FCD34D",
                 "repo_box_bg": "#0C4A6E",
                 "repo_box_border": "#0284C7",
                 "repo_box_txt": "#7DD3FC",
@@ -86,6 +90,10 @@ def main(page: ft.Page):
                 "ubic_txt": "#E9D5FF",
                 "sku_bg": "#1E3A8A",
                 "sku_txt": "#BFDBFE",
+                "sec_stock_bg": "#064E3B",
+                "sec_stock_txt": "#6EE7B7",
+                "sec_zero_bg": "#450A0A",
+                "sec_zero_txt": "#FCA5A5",
             }
         return {
             "bg": "#F8FAFC",
@@ -101,6 +109,9 @@ def main(page: ft.Page):
             "bcv_box_bg": "#ECFDF5",
             "bcv_box_border": "#6EE7B7",
             "bcv_box_txt": "#047857",
+            "mult_box_bg": "#FEF3C7",
+            "mult_box_border": "#F59E0B",
+            "mult_box_txt": "#92400E",
             "repo_box_bg": "#F0F9FF",
             "repo_box_border": "#7DD3FC",
             "repo_box_txt": "#0369A1",
@@ -108,6 +119,10 @@ def main(page: ft.Page):
             "ubic_txt": "#6B21A8",
             "sku_bg": "#DBEAFE",
             "sku_txt": "#1E40AF",
+            "sec_stock_bg": "#ECFDF5",
+            "sec_stock_txt": "#15803D",
+            "sec_zero_bg": "#FEF2F2",
+            "sec_zero_txt": "#B91C1C",
         }
 
     def obtener_ancho_modal() -> int:
@@ -128,13 +143,15 @@ def main(page: ft.Page):
         page.show_dialog(sb)
 
     # =========================================================================
-    # PANEL DE TASAS RÁPIDAS Y SINCRONIZACIÓN OPCIONAL
+    # PANEL DE TASAS Y MULTIPLICADOR GLOBAL (BCV + BASE 1100 EDITABLE)
     # =========================================================================
     txt_titulo_app = ft.Text("Inventario Pro", size=18, weight=ft.FontWeight.BOLD, color="#0F172A")
     icono_app = ft.Icon(ft.Icons.INVENTORY_ROUNDED, color="#0284C7", size=24)
 
     txt_tasa_bcv = ft.Text("", size=15, weight=ft.FontWeight.BOLD, color="#0F172A")
-    txt_tasa_repo = ft.Text("", size=15, weight=ft.FontWeight.BOLD, color="#0284C7")
+    txt_tasa_repo = ft.Text("", size=15, weight=ft.FontWeight.BOLD, color="#B45309")
+    lbl_sub_bcv = ft.Text("Al subir el dólar BCV sube el precio en Bs.", size=11, color="#64748B")
+    lbl_sub_repo = ft.Text("Multiplicador global en Bs. (ej. 1100)", size=11, color="#64748B")
     lbl_fecha_tasa = ft.Text("", size=11, color="#64748B")
     badge_estado_tasas = ft.Container(
         content=ft.Text("SQLITE", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
@@ -144,22 +161,22 @@ def main(page: ft.Page):
     )
 
     def refrescar_tasa_api(e=None):
-        """Sincroniza tasas opcionalmente con DolarApi en segundo plano cuando el usuario lo solicita."""
+        """Sincroniza la tasa BCV desde DolarApi cuando el usuario lo solicita."""
         btn_sync_api.disabled = True
-        lbl_fecha_tasa.value = "Consultando DolarApi..."
+        lbl_fecha_tasa.value = "Consultando DolarApi en línea..."
         page.update()
 
         def tarea_red():
             res = dolar_service.obtener_tasa_dolar(forzar_red=True)
             if res.get("online"):
+                # Actualizamos la Tasa BCV desde API conservando el Multiplicador Global si el usuario no desea pisarlo
                 estado["tasa_bcv"] = float(res["bcv"])
-                estado["tasa_reposicion"] = float(res["paralelo"])
                 estado["tasa_online"] = True
-                estado["tasa_mensaje"] = f"API en vivo ({res['fecha']})"
+                estado["tasa_mensaje"] = f"Tasa BCV API ({res['fecha']})"
                 database.actualizar_tasas(estado["tasa_bcv"], estado["tasa_reposicion"])
             else:
                 estado["tasa_online"] = False
-                estado["tasa_mensaje"] = f"Sin conexión: usando tasas locales"
+                estado["tasa_mensaje"] = "Sin conexión: usando valores locales"
             actualizar_panel_tasas()
             actualizar_kpis()
             renderizar_pagina_actual()
@@ -168,8 +185,8 @@ def main(page: ft.Page):
 
             if res.get("online"):
                 notificar(
-                    f"Tasas sincronizadas: BCV {database.formatear_bs(estado['tasa_bcv'])} | "
-                    f"Reposición {database.formatear_bs(estado['tasa_reposicion'])}"
+                    f"Tasa BCV actualizada a {database.formatear_bs(estado['tasa_bcv'])} | "
+                    f"Multiplicador: {estado['tasa_reposicion']:,.2f}"
                 )
             else:
                 notificar("Sin acceso a internet. Se mantienen tus tasas locales.", es_error=True)
@@ -177,22 +194,22 @@ def main(page: ft.Page):
         threading.Thread(target=tarea_red, daemon=True).start()
 
     def abrir_modal_tasas(e=None):
-        """Diálogo modal rápido para editar Tasa BCV y Tasa Reposición y recalcular todo al vuelo."""
+        """Modal para editar el Multiplicador Global (1100) y la Tasa BCV recalibrando todo el inventario."""
         p_col = pal()
         in_bcv = ft.TextField(
-            label="Tasa Oficial BCV (Bs/$)",
+            label="Tasa Oficial Dólar BCV (Bs/$)",
             value=f"{estado['tasa_bcv']:.2f}",
             keyboard_type=ft.KeyboardType.NUMBER,
             border_radius=8,
             content_padding=10,
-            autofocus=True,
         )
         in_repo = ft.TextField(
-            label="Tasa Reposición / Paralelo (Bs/$)",
+            label="Multiplicador Global / Precio Base Bs. (ej. 1100)",
             value=f"{estado['tasa_reposicion']:.2f}",
             keyboard_type=ft.KeyboardType.NUMBER,
             border_radius=8,
             content_padding=10,
+            autofocus=True,
         )
         lbl_ejemplo = ft.Text("", size=12, color=p_col["accent"], weight=ft.FontWeight.W_600)
 
@@ -202,19 +219,25 @@ def main(page: ft.Page):
                 rep_v = float((in_repo.value or "").replace(",", "."))
                 if bcv_v > 0 and rep_v > 0:
                     factor = rep_v / bcv_v
-                    ejemplo_usd = 10.0 * factor
-                    ejemplo_bs = 10.0 * rep_v
+                    ej_mult = 10.0 * rep_v
+                    ej_bcv_bs = 10.0 * bcv_v
+                    ej_aj_usd = ej_mult / bcv_v
                     lbl_ejemplo.value = (
-                        f"Factor arbitraje: ×{factor:.4f}\n"
-                        f"Ej. Producto Base $10.00 -> Ajustado BCV: ${ejemplo_usd:,.2f} | "
-                        f"Total: {database.formatear_bs(ejemplo_bs)}"
+                        f"Ejemplo artículo base $10.00 (factor ×{factor:.4f}):\n"
+                        f"• Multiplicación (× {rep_v:,.0f}): {database.formatear_bs(ej_mult)}\n"
+                        f"• A Tasa BCV ({bcv_v:,.2f}): {database.formatear_bs(ej_bcv_bs)}\n"
+                        f"• Ajustado BCV en USD: ${ej_aj_usd:,.2f}"
                     )
                 else:
-                    lbl_ejemplo.value = "Ambas tasas deben ser mayores a 0"
+                    lbl_ejemplo.value = "Ambos montos deben ser mayores a 0"
             except Exception:
                 lbl_ejemplo.value = "Ingresa valores numéricos válidos"
             if ev is not None:
                 page.update()
+
+        def aplicar_preset_mult(valor: float):
+            in_repo.value = f"{valor:.2f}"
+            actualizar_preview_tasas(ev="preset")
 
         actualizar_preview_tasas()
         in_bcv.on_change = actualizar_preview_tasas
@@ -229,11 +252,11 @@ def main(page: ft.Page):
                 nuevo_bcv = float((in_bcv.value or "").strip().replace(",", "."))
                 nuevo_repo = float((in_repo.value or "").strip().replace(",", "."))
             except ValueError:
-                notificar("Ingresa tasas numéricas válidas (ej. 914.02 y 1200.00)", es_error=True)
+                notificar("Ingresa montos numéricos válidos (ej. 914.02 y 1100)", es_error=True)
                 return
 
             if nuevo_bcv <= 0 or nuevo_repo <= 0:
-                notificar("Las tasas deben ser mayores a cero", es_error=True)
+                notificar("Ambos valores deben ser mayores a cero", es_error=True)
                 return
 
             database.actualizar_tasas(nuevo_bcv, nuevo_repo)
@@ -247,14 +270,14 @@ def main(page: ft.Page):
             actualizar_kpis()
             renderizar_pagina_actual()
             notificar(
-                f"Tasas actualizadas: BCV {database.formatear_bs(nuevo_bcv)} | "
-                f"Reposición {database.formatear_bs(nuevo_repo)}"
+                f"Actualizado: BCV {database.formatear_bs(nuevo_bcv)} | "
+                f"Multiplicador Global {nuevo_repo:,.2f}"
             )
 
         dlg = ft.AlertDialog(
             title=ft.Row(
                 [
-                    ft.Row([ft.Icon(ft.Icons.CURRENCY_EXCHANGE_ROUNDED, color="#0284C7"), ft.Text("Editar Tasas Cambiarias", size=16, weight=ft.FontWeight.BOLD)], spacing=8),
+                    ft.Row([ft.Icon(ft.Icons.TUNE_ROUNDED, color="#0284C7"), ft.Text("Editar Multiplicador y Tasa BCV", size=15, weight=ft.FontWeight.BOLD)], spacing=8),
                     ft.IconButton(ft.Icons.CLOSE_ROUNDED, icon_color=p_col["muted"], on_click=cerrar),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -262,9 +285,24 @@ def main(page: ft.Page):
             content=ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Text("Ajusta las tasas para recalcular al instante todos los precios del catálogo.", size=12, color=p_col["muted"]),
+                        ft.Text(
+                            "Si aumenta la tasa BCV o aumentas el multiplicador global (ej. 1100 -> 1200), "
+                            "todos los precios del catálogo se recalculan al instante.",
+                            size=12,
+                            color=p_col["muted"],
+                        ),
                         in_bcv,
                         in_repo,
+                        ft.Row(
+                            controls=[
+                                ft.Text("Valores rápidos:", size=11, color=p_col["muted"]),
+                                ft.OutlinedButton(content="1100", on_click=lambda e: aplicar_preset_mult(1100.0)),
+                                ft.OutlinedButton(content="1150", on_click=lambda e: aplicar_preset_mult(1150.0)),
+                                ft.OutlinedButton(content="1200", on_click=lambda e: aplicar_preset_mult(1200.0)),
+                            ],
+                            spacing=6,
+                            wrap=True,
+                        ),
                         ft.Container(
                             content=lbl_ejemplo,
                             bgcolor=p_col["repo_box_bg"],
@@ -274,7 +312,7 @@ def main(page: ft.Page):
                         ),
                         ft.Divider(height=10, color=p_col["border"]),
                         ft.FilledButton(
-                            content="Guardar y Recalcular Todo",
+                            content="Aplicar a Todo el Inventario",
                             icon=ft.Icons.CHECK_CIRCLE_ROUNDED,
                             bgcolor="#0284C7",
                             color=ft.Colors.WHITE,
@@ -295,14 +333,14 @@ def main(page: ft.Page):
         page.show_dialog(dlg)
 
     btn_editar_tasas = ft.FilledTonalButton(
-        content="Editar Tasas",
+        content="Editar 1100 / BCV",
         icon=ft.Icons.EDIT_ROUNDED,
         on_click=abrir_modal_tasas,
     )
     btn_sync_api = ft.IconButton(
         icon=ft.Icons.SYNC_ROUNDED,
         icon_color="#0284C7",
-        tooltip="Sincronizar con DolarApi (internet)",
+        tooltip="Actualizar tasa BCV desde DolarApi (internet)",
         on_click=refrescar_tasa_api,
     )
 
@@ -312,11 +350,13 @@ def main(page: ft.Page):
         rep_s = database.formatear_bs(estado["tasa_reposicion"])
         factor = estado["tasa_reposicion"] / estado["tasa_bcv"] if estado["tasa_bcv"] > 0 else 1.0
 
-        txt_tasa_bcv.value = f"Tasa BCV: {bcv_s}"
+        txt_tasa_bcv.value = f"Tasa Dólar BCV: {bcv_s}"
         txt_tasa_bcv.color = p_col["text"]
-        txt_tasa_repo.value = f"Tasa Reposición: {rep_s}"
-        txt_tasa_repo.color = p_col["accent"]
-        lbl_fecha_tasa.value = f"{estado['tasa_mensaje']} • Arbitraje: ×{factor:.4f}"
+        txt_tasa_repo.value = f"Multiplicador Global: {rep_s}"
+        txt_tasa_repo.color = p_col["mult_box_txt"]
+        lbl_sub_bcv.color = p_col["muted"]
+        lbl_sub_repo.color = p_col["muted"]
+        lbl_fecha_tasa.value = f"{estado['tasa_mensaje']} • Relación: ×{factor:.4f}"
         lbl_fecha_tasa.color = p_col["muted"]
 
         if estado["tasa_online"]:
@@ -324,7 +364,7 @@ def main(page: ft.Page):
             badge_estado_tasas.content.value = "API LIVE"
         else:
             badge_estado_tasas.bgcolor = "#0284C7"
-            badge_estado_tasas.content.value = "OFFLINE"
+            badge_estado_tasas.content.value = "LOCAL"
 
     actualizar_panel_tasas()
 
@@ -338,7 +378,7 @@ def main(page: ft.Page):
                             controls=[
                                 ft.Row(
                                     controls=[
-                                        ft.Text("PANEL DE TASAS RÁPIDAS", size=11, weight=ft.FontWeight.BOLD, color="#0284C7"),
+                                        ft.Text("TASAS Y MULTIPLICADOR GLOBAL", size=11, weight=ft.FontWeight.BOLD, color="#0284C7"),
                                         badge_estado_tasas,
                                     ],
                                     spacing=6,
@@ -346,8 +386,8 @@ def main(page: ft.Page):
                                 ft.Row(controls=[txt_tasa_bcv, txt_tasa_repo], spacing=14, wrap=True),
                                 lbl_fecha_tasa,
                             ],
-                            spacing=2,
-                            expand=True,
+                            spacing=1,
+                            alignment=ft.MainAxisAlignment.CENTER,
                         ),
                     ],
                     spacing=10,
@@ -362,7 +402,6 @@ def main(page: ft.Page):
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            wrap=True,
         ),
         bgcolor=ft.Colors.WHITE,
         border=ft.Border.all(1, "#E2E8F0"),
@@ -439,7 +478,7 @@ def main(page: ft.Page):
         recargar_datos_y_renderizar()
 
     input_busqueda = ft.TextField(
-        hint_text="Buscar por nombre, SKU o ubicación (ej. BRIAN, DEP, YUDY, ROUTER)...",
+        hint_text="Buscar por nombre, característica, SKU o ubicación (ej. BRIAN, HDMI, ROUTER)...",
         prefix_icon=ft.Icons.SEARCH,
         suffix=ft.IconButton(ft.Icons.CLEAR, on_click=limpiar_busqueda, tooltip="Limpiar búsqueda"),
         bgcolor=ft.Colors.WHITE,
@@ -452,7 +491,8 @@ def main(page: ft.Page):
         on_change=on_busqueda_change,
     )
 
-    fila_busqueda = ft.Row(controls=[input_busqueda], expand=False)
+    # Row SIN wrap=True para que expand=True estire la barra de búsqueda al 100% sin errores de layout
+    fila_busqueda = ft.Row(controls=[input_busqueda])
 
     def actualizar_estilo_chips():
         p_col = pal()
@@ -493,7 +533,7 @@ def main(page: ft.Page):
     )
 
     btn_chip_todos = ft.Container(
-        content=ft.Text("Todos", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+        content=ft.Text("Todos (A-Z)", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
         bgcolor="#0F172A",
         border=ft.Border.all(1, "#CBD5E1"),
         border_radius=20,
@@ -570,21 +610,21 @@ def main(page: ft.Page):
         border=ft.Border.all(1, "#E2E8F0"),
         border_radius=10,
         padding=ft.Padding.symmetric(horizontal=8, vertical=2),
-        margin=ft.Margin.only(right=68),  # Evita solapamiento con el FloatingActionButton '+'
+        margin=ft.Margin.only(right=68),
     )
 
     # =========================================================================
-    # LISTA DE PRODUCTOS Y TARJETAS CON ARBITRAJE CAMBIARIO
+    # LISTA DE PRODUCTOS (STOCK ARRIBA A-Z / AGOTADOS AL FINAL A-Z)
     # =========================================================================
     lista_cards_container = ft.ListView(
         controls=[],
         spacing=8,
-        padding=ft.Padding.only(bottom=72),  # Espacio inferior para scroll libre sobre el FAB
+        padding=ft.Padding.only(bottom=72),
         expand=True,
     )
 
     def ajustar_stock_rapido(producto_id: int, delta: int):
-        """Actualiza el stock en SQLite bloqueando valores negativos y refresca in-place."""
+        """Actualiza el stock en SQLite bloqueando negativos; si cambia de grupo (0 <-> >0), reordena A-Z."""
         ref = tarjetas_ui_refs.get(producto_id)
         if not ref:
             return
@@ -598,18 +638,13 @@ def main(page: ft.Page):
         ref["datos"]["cantidad"] = nueva_cantidad
         actualizar_kpis()
 
-        if (estado["categoria_filtro"] == "stock" and nueva_cantidad == 0) or (
-            estado["categoria_filtro"] == "agotados" and nueva_cantidad > 0
-        ):
+        cambio_grupo = (cant_actual == 0 and nueva_cantidad > 0) or (cant_actual > 0 and nueva_cantidad == 0)
+        if cambio_grupo:
             recargar_datos_y_renderizar()
             return
 
-        es_disp = nueva_cantidad > 0
         badge_st: ft.Container = ref["badge_stock"]
-        badge_st.bgcolor = "#DCFCE7" if es_disp else "#FEE2E2"
-        badge_st.content.value = f"{nueva_cantidad} en stock" if es_disp else "Agotado (0)"
-        badge_st.content.color = "#15803D" if es_disp else "#B91C1C"
-
+        badge_st.content.value = f"{nueva_cantidad} en stock"
         txt_num: ft.Text = ref["txt_cant"]
         txt_num.value = str(nueva_cantidad)
         page.update()
@@ -660,7 +695,7 @@ def main(page: ft.Page):
         page.show_dialog(dlg)
 
     def crear_tarjeta_producto(p: Dict[str, Any]) -> ft.Container:
-        """Crea una tarjeta adaptable con arbitraje cambiario y control rápido de stock."""
+        """Crea tarjeta adaptable con descripción de características y cálculos BCV/Multiplicador."""
         p_col = pal()
         t_bcv = estado["tasa_bcv"]
         t_repo = estado["tasa_reposicion"]
@@ -669,6 +704,7 @@ def main(page: ft.Page):
 
         precios = database.calcular_precios_producto(p, t_bcv, t_repo)
         costo_str = database.formatear_usd(p["costo_usd"]) if p.get("costo_usd") else "-"
+        desc_corta = p.get("descripcion_corta") or database.obtener_descripcion_caracteristicas(p)
 
         badge_sku = ft.Container(
             content=ft.Text(p["sku"], size=11, weight=ft.FontWeight.BOLD, color=p_col["sku_txt"]),
@@ -693,16 +729,10 @@ def main(page: ft.Page):
         if p.get("ubicacion_nota"):
             badges_cabecera.append(
                 ft.Container(
-                    content=ft.Row(
-                        controls=[
-                            ft.Icon(ft.Icons.LOCATION_ON_OUTLINED, size=12, color=p_col["ubic_txt"]),
-                            ft.Text(str(p["ubicacion_nota"]), size=11, weight=ft.FontWeight.W_600, color=p_col["ubic_txt"]),
-                        ],
-                        spacing=3,
-                    ),
+                    content=ft.Text(f"📍 {p['ubicacion_nota']}", size=11, weight=ft.FontWeight.W_600, color=p_col["ubic_txt"]),
                     bgcolor=p_col["ubic_bg"],
                     border_radius=6,
-                    padding=ft.Padding.symmetric(horizontal=7, vertical=3),
+                    padding=ft.Padding.symmetric(horizontal=8, vertical=3),
                 )
             )
 
@@ -714,15 +744,15 @@ def main(page: ft.Page):
             "txt_cant": txt_cant_rapida,
         }
 
-        origen_lbl = f"Base ({precios['origen_base']})" if precios["tiene_precio"] else "Precio Base"
+        origen_lbl = f"BASE ({precios['origen_base'].upper()})" if precios["tiene_precio"] else "PRECIO BASE"
         color_bcv = p_col["bcv_box_txt"] if precios["tiene_precio"] else p_col["muted"]
-        color_bs = p_col["repo_box_txt"] if precios["tiene_precio"] else p_col["muted"]
+        color_mult = p_col["mult_box_txt"] if precios["tiene_precio"] else p_col["muted"]
 
-        # Bloque 1: Precio Base
+        # Bloque 1: Precio Base ($)
         col_base = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text(origen_lbl.upper(), size=10, color=p_col["muted"], weight=ft.FontWeight.W_600),
+                    ft.Text(origen_lbl, size=10, color=p_col["muted"], weight=ft.FontWeight.W_600),
                     ft.Text(precios["precio_base_str"], size=14, weight=ft.FontWeight.BOLD, color=p_col["text"]),
                     ft.Text(f"Costo: {costo_str}", size=10, color=p_col["muted"]),
                 ],
@@ -732,13 +762,31 @@ def main(page: ft.Page):
             col={"xs": 6, "sm": 3},
         )
 
-        # Bloque 2: Precio Ajustado BCV (Destacado)
+        # Bloque 2: Multiplicación (USD × 1100 o valor global configurado)
+        mult_titulo = f"MULTIPL. (× {t_repo:,.0f})"
+        col_mult_bs = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text(mult_titulo, size=10, color=color_mult, weight=ft.FontWeight.BOLD),
+                    ft.Text(precios["monto_bs_reposicion_str"], size=13, weight=ft.FontWeight.BOLD, color=color_mult),
+                    ft.Text("Base Bs. Reposición", size=10, color=p_col["muted"]),
+                ],
+                spacing=1,
+            ),
+            bgcolor=p_col["mult_box_bg"] if precios["tiene_precio"] else p_col["card_sec"],
+            border=ft.Border.all(1, p_col["mult_box_border"] if precios["tiene_precio"] else p_col["border"]),
+            border_radius=8,
+            padding=6,
+            col={"xs": 6, "sm": 3},
+        )
+
+        # Bloque 3: Precio Ajustado BCV ($) y Bs a BCV directo
         col_ajustado_bcv = ft.Container(
             content=ft.Column(
                 controls=[
                     ft.Text("AJUSTADO BCV ($)", size=10, color=color_bcv, weight=ft.FontWeight.BOLD),
-                    ft.Text(precios["precio_venta_bcv_usd_str"], size=15, weight=ft.FontWeight.BOLD, color=color_bcv),
-                    ft.Text("Cobro ref. BCV", size=10, color=color_bcv),
+                    ft.Text(precios["precio_venta_bcv_usd_str"], size=14, weight=ft.FontWeight.BOLD, color=color_bcv),
+                    ft.Text(f"BCV Directo: {precios['monto_bs_bcv_directo_str']}", size=10, color=p_col["muted"]),
                 ],
                 spacing=1,
             ),
@@ -749,28 +797,11 @@ def main(page: ft.Page):
             col={"xs": 6, "sm": 3},
         )
 
-        # Bloque 3: Total en Bs (Reposición)
-        col_bs_repo = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text("TOTAL REPOSICIÓN (BS)", size=10, color=color_bs, weight=ft.FontWeight.BOLD),
-                    ft.Text(precios["monto_bs_reposicion_str"], size=13, weight=ft.FontWeight.BOLD, color=color_bs),
-                    ft.Text(f"BCV Directo: {precios['monto_bs_bcv_directo_str']}", size=10, color=p_col["muted"]),
-                ],
-                spacing=1,
-            ),
-            bgcolor=p_col["repo_box_bg"] if precios["tiene_precio"] else p_col["card_sec"],
-            border=ft.Border.all(1, p_col["repo_box_border"] if precios["tiene_precio"] else p_col["border"]),
-            border_radius=8,
-            padding=6,
-            col={"xs": 6, "sm": 3},
-        )
-
-        # Bloque 4: Ajuste rápido de stock (- / +)
+        # Bloque 4: Control rápido de stock (- / +)
         col_stock_ctrl = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text("AJUSTAR STOCK", size=10, color=p_col["muted"], weight=ft.FontWeight.W_600),
+                    ft.Text("STOCK", size=10, color=p_col["muted"], weight=ft.FontWeight.W_600),
                     ft.Row(
                         controls=[
                             ft.IconButton(
@@ -802,10 +833,10 @@ def main(page: ft.Page):
         return ft.Container(
             content=ft.Column(
                 controls=[
-                    # Fila 1: Badges + Editar / Eliminar
+                    # Fila 1: Badges + Editar / Eliminar (sin wrap anidado ni expand)
                     ft.Row(
                         controls=[
-                            ft.Row(controls=badges_cabecera, spacing=6, wrap=True),
+                            ft.Row(controls=badges_cabecera, spacing=6),
                             ft.Row(
                                 controls=[
                                     ft.TextButton(
@@ -830,23 +861,18 @@ def main(page: ft.Page):
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         wrap=True,
                     ),
-                    # Fila 2: Nombre del producto (tocable para editar)
-                    ft.Container(
-                        content=ft.Text(p["nombre"], size=14, weight=ft.FontWeight.W_700, color=p_col["text"]),
-                        on_click=lambda e, pid=p["id"]: abrir_modal_detalle(pid),
-                        ink=True,
-                        border_radius=6,
-                        padding=ft.Padding.symmetric(vertical=2),
-                    ),
+                    # Fila 2 y 3: Nombre del producto y descripción corta con características
+                    ft.Text(p["nombre"], size=14, weight=ft.FontWeight.W_700, color=p_col["text"]),
+                    ft.Text(f"📋 {desc_corta}", size=12, color=p_col["subtext"], weight=ft.FontWeight.W_500),
                     ft.Divider(height=1, color=p_col["border"]),
-                    # Fila 3: Desglose financiero y control de stock
+                    # Fila 4: Desglose financiero y control de stock
                     ft.ResponsiveRow(
-                        controls=[col_base, col_ajustado_bcv, col_bs_repo, col_stock_ctrl],
+                        controls=[col_base, col_mult_bs, col_ajustado_bcv, col_stock_ctrl],
                         spacing=8,
                         run_spacing=8,
                     ),
                 ],
-                spacing=6,
+                spacing=5,
             ),
             bgcolor=p_col["card"],
             border=ft.Border.all(1, p_col["border"]),
@@ -854,8 +880,27 @@ def main(page: ft.Page):
             padding=12,
         )
 
+    def crear_encabezado_seccion(titulo: str, es_stock: bool) -> ft.Container:
+        p_col = pal()
+        bg = p_col["sec_stock_bg"] if es_stock else p_col["sec_zero_bg"]
+        fg = p_col["sec_stock_txt"] if es_stock else p_col["sec_zero_txt"]
+        icono = ft.Icons.CHECK_CIRCLE_ROUNDED if es_stock else ft.Icons.CANCEL_OUTLINED
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(icono, size=15, color=fg),
+                    ft.Text(titulo, size=12, weight=ft.FontWeight.BOLD, color=fg),
+                ],
+                spacing=6,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            bgcolor=bg,
+            border_radius=8,
+            padding=ft.Padding.symmetric(horizontal=10, vertical=6),
+        )
+
     def renderizar_pagina_actual():
-        """Dibuja únicamente el lote activo (máximo 40 tarjetas) para máxima fluidez."""
+        """Dibuja únicamente el lote activo (máx. 40 tarjetas) separando Stock A-Z arriba y Agotados A-Z abajo."""
         p_col = pal()
         prods = estado["productos_filtrados"]
         total = len(prods)
@@ -888,7 +933,19 @@ def main(page: ft.Page):
                 )
             )
         else:
+            mostro_header_stock = False
+            mostro_header_agotados = False
             for prod in lote:
+                if prod["cantidad"] > 0 and not mostro_header_stock:
+                    lista_cards_container.controls.append(
+                        crear_encabezado_seccion("DISPONIBLES EN STOCK (Orden A-Z)", es_stock=True)
+                    )
+                    mostro_header_stock = True
+                elif prod["cantidad"] == 0 and not mostro_header_agotados:
+                    lista_cards_container.controls.append(
+                        crear_encabezado_seccion("SIN STOCK / AGOTADOS (Orden A-Z)", es_stock=False)
+                    )
+                    mostro_header_agotados = True
                 lista_cards_container.controls.append(crear_tarjeta_producto(prod))
 
         lbl_contador_resultados.value = f"{total} artículos encontrados"
@@ -901,7 +958,7 @@ def main(page: ft.Page):
         page.update()
 
     def recargar_datos_y_renderizar():
-        """Consulta SQLite con índices optimizados y actualiza la vista."""
+        """Consulta SQLite (Stock primero A-Z, Agotados al final A-Z) y actualiza la vista."""
         solo_stock = (estado["categoria_filtro"] == "stock") or estado["solo_stock"]
         solo_agotados = (estado["categoria_filtro"] == "agotados")
 
@@ -922,12 +979,13 @@ def main(page: ft.Page):
         in_sku = ft.TextField(label="SKU / Código", value=sku_sugerido, border_radius=8, content_padding=10, expand=True)
         in_cantidad = ft.TextField(label="Stock Inicial", value="0", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         in_nombre = ft.TextField(label="Nombre del Artículo *", border_radius=8, content_padding=10, autofocus=True, expand=True)
+        in_desc_corta = ft.TextField(label="Descripción / Características (Opcional)", hint_text="Se genera automática si se deja vacío", border_radius=8, content_padding=10, expand=True)
         in_detal = ft.TextField(label="Precio Detal ($)", hint_text="10.00", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         in_desc = ft.TextField(label="Precio Lista/Desc. ($)", hint_text="8.00", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         in_costo = ft.TextField(label="Costo Base ($)", hint_text="4.50", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         in_ubicacion = ft.TextField(label="Ubicación / Nota", hint_text="Depósito, BRIAN...", border_radius=8, content_padding=10, expand=True)
 
-        txt_preview_calc = ft.Text("Vista previa de arbitraje: Sin precio", size=12, color=p_col["accent"], weight=ft.FontWeight.W_600)
+        txt_preview_calc = ft.Text("Vista previa: Sin precio", size=12, color=p_col["accent"], weight=ft.FontWeight.W_600)
 
         def parse_float(val):
             if not val or not val.strip():
@@ -945,11 +1003,12 @@ def main(page: ft.Page):
             c = database.calcular_precios_producto(sim_prod, estado["tasa_bcv"], estado["tasa_reposicion"])
             if c["tiene_precio"]:
                 txt_preview_calc.value = (
-                    f"Base ({c['origen_base']}): {c['precio_base_str']}\n"
-                    f"Ajustado BCV: {c['precio_venta_bcv_usd_str']}  |  Total: {c['monto_bs_reposicion_str']}"
+                    f"Base ({c['origen_base']}): {c['precio_base_str']} | "
+                    f"Mult. ({estado['tasa_reposicion']:,.0f}): {c['monto_bs_reposicion_str']}\n"
+                    f"Ajustado BCV: {c['precio_venta_bcv_usd_str']} | BCV Directo: {c['monto_bs_bcv_directo_str']}"
                 )
             else:
-                txt_preview_calc.value = "Vista previa de arbitraje: Sin precio"
+                txt_preview_calc.value = "Vista previa: Sin precio"
             if ev is not None:
                 page.update()
 
@@ -985,6 +1044,7 @@ def main(page: ft.Page):
                 precio_descuento=parse_float(in_desc.value),
                 costo=parse_float(in_costo.value),
                 ubicacion=(in_ubicacion.value or "").strip() or None,
+                descripcion=(in_desc_corta.value or "").strip() or None,
             )
 
             if exito:
@@ -1008,6 +1068,7 @@ def main(page: ft.Page):
                     controls=[
                         ft.Row([in_sku, in_cantidad], spacing=8),
                         ft.Row([in_nombre], spacing=8),
+                        ft.Row([in_desc_corta], spacing=8),
                         ft.Row([in_detal, in_desc], spacing=8),
                         ft.Container(
                             content=txt_preview_calc,
@@ -1051,6 +1112,14 @@ def main(page: ft.Page):
         ed_sku = ft.TextField(label="SKU / Código", value=p["sku"], border_radius=8, content_padding=10, expand=True)
         ed_cantidad = ft.TextField(label="Stock Actual", value=str(p["cantidad"]), keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         ed_nombre = ft.TextField(label="Nombre del Producto", value=p["nombre"], border_radius=8, content_padding=10, expand=True)
+        ed_desc_corta = ft.TextField(
+            label="Descripción / Características",
+            value=p.get("descripcion") or "",
+            hint_text=p.get("descripcion_corta") or "Se genera automática si se deja vacío",
+            border_radius=8,
+            content_padding=10,
+            expand=True,
+        )
         ed_detal = ft.TextField(label="Precio Detal ($)", value=str(p["precio_detal_usd"]) if p["precio_detal_usd"] is not None else "", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         ed_desc = ft.TextField(label="Precio Lista/Desc. ($)", value=str(p["precio_descuento_usd"]) if p["precio_descuento_usd"] is not None else "", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
         ed_costo = ft.TextField(label="Costo Base ($)", value=str(p["costo_usd"]) if p["costo_usd"] is not None else "", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8, content_padding=10, expand=True)
@@ -1074,9 +1143,9 @@ def main(page: ft.Page):
             c = database.calcular_precios_producto(sim_prod, estado["tasa_bcv"], estado["tasa_reposicion"])
             if c["tiene_precio"]:
                 lbl_info_arbitraje.value = (
-                    f"Base ({c['origen_base']}): {c['precio_base_str']}\n"
-                    f"Ajustado BCV: {c['precio_venta_bcv_usd_str']}  |  "
-                    f"Reposición: {c['monto_bs_reposicion_str']}"
+                    f"Base ({c['origen_base']}): {c['precio_base_str']} | "
+                    f"Mult. ({estado['tasa_reposicion']:,.0f}): {c['monto_bs_reposicion_str']}\n"
+                    f"Ajustado BCV: {c['precio_venta_bcv_usd_str']} | BCV Directo: {c['monto_bs_bcv_directo_str']}"
                 )
             else:
                 lbl_info_arbitraje.value = "Sin precio configurado"
@@ -1111,6 +1180,7 @@ def main(page: ft.Page):
                 precio_descuento=parse_float(ed_desc.value),
                 costo=parse_float(ed_costo.value),
                 ubicacion=(ed_ubicacion.value or "").strip() or None,
+                descripcion=(ed_desc_corta.value or "").strip() or None,
             )
 
             if exito:
@@ -1138,6 +1208,7 @@ def main(page: ft.Page):
                     controls=[
                         ft.Row([ed_sku, ed_cantidad], spacing=8),
                         ft.Row([ed_nombre], spacing=8),
+                        ft.Row([ed_desc_corta], spacing=8),
                         ft.Row([ed_detal, ed_desc], spacing=8),
                         ft.Container(
                             content=lbl_info_arbitraje,
@@ -1460,7 +1531,7 @@ def main(page: ft.Page):
                     controls=[
                         ft.Text(
                             f"Se exportarán {len(prods_a_exportar)} artículos\n"
-                            f"BCV: {database.formatear_bs(t_bcv)} | Reposición: {database.formatear_bs(t_repo)}",
+                            f"BCV: {database.formatear_bs(t_bcv)} | Multiplicador: {database.formatear_bs(t_repo)}",
                             size=12,
                             color=p_col["subtext"],
                         ),

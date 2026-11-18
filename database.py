@@ -5,13 +5,14 @@ tasas cambiarias configurables, cálculo de arbitraje en tiempo real y consultas
 """
 
 import os
+import re
 import shutil
 import sqlite3
 from typing import List, Dict, Any, Optional
 
 DB_NAME = "inventario.db"
 TASA_BCV_DEFECTO = 914.02
-TASA_REPOSICION_DEFECTO = 1200.00
+TASA_REPOSICION_DEFECTO = 1100.00
 _ultima_fecha_sync = "Guardada local"
 
 
@@ -393,14 +394,22 @@ def seed_database():
         precio_descuento_usd REAL NULL,
         costo_usd REAL NULL,
         ubicacion_nota TEXT NULL,
+        descripcion TEXT NULL,
         activo INTEGER NOT NULL DEFAULT 1,
         fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """)
 
-    # Índices para búsquedas y filtrados instantáneos
+    # Migración segura si existía tabla previa sin columna descripcion
+    try:
+        cursor.execute("ALTER TABLE productos ADD COLUMN descripcion TEXT NULL;")
+    except sqlite3.OperationalError:
+        pass
+
+    # Índices para búsquedas y ordenamiento instantáneo (Stock primero A-Z)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_productos_activo_id ON productos(activo, id);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_productos_activo_cant ON productos(activo, cantidad);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_productos_orden ON productos(activo, cantidad, nombre);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_productos_sku ON productos(sku);")
 
     # Verificar esquema de configuracion para garantizar (clave TEXT PRIMARY KEY, valor REAL NOT NULL)
@@ -530,8 +539,145 @@ def calcular_precios_producto(p: Dict[str, Any], tasa_bcv: float, tasa_reposicio
     }
 
 
+_CATEGORIAS_DESC = [
+    (("ADAPTADOR",), "Adaptador de señal"),
+    (("CABLE",), "Cable de conexión"),
+    (("AUDIFONO", "AUDÍFONO"), "Audio personal"),
+    (("ROUTER", "MODEN", "MODEM"), "Red e Internet Wi-Fi"),
+    (("BOBINA",), "Bobina de cableado"),
+    (("CONECTOR", "RJ45"), "Conector de red"),
+    (("SWITCH",), "Switch de red"),
+    (("CAMARA", "CÁMARA"), "Cámara de seguridad"),
+    (("CORNETA", "BARRA DE SONIDO", "PARLANTE"), "Sistema de audio"),
+    (("PENDRIVE", "MEMORIA", "RAM"), "Memoria / Almacenamiento"),
+    (("DISCO", "SSD", "HDD"), "Unidad de almacenamiento"),
+    (("MOUSE",), "Mouse periférico"),
+    (("TECLADO",), "Teclado periférico"),
+    (("COMBO",), "Combo de periféricos"),
+    (("FUENTE",), "Fuente de poder"),
+    (("BATERIA", "BATERÍA", "UPS"), "Respaldo de energía"),
+    (("REGULADOR", "PROTECTOR"), "Protección eléctrica"),
+    (("BASE", "SOPORTE"), "Soporte / Montaje"),
+    (("WEBCAM",), "Cámara web"),
+    (("MICROFONO", "MICRÓFONO"), "Micrófono"),
+    (("CARGADOR",), "Cargador / Alimentación"),
+    (("MONITOR", "PANTALLA"), "Monitor / Pantalla"),
+    (("TARJETA",), "Tarjeta / Interfaz"),
+    (("HUB", "MULTIPUERTO"), "Concentrador de puertos"),
+]
+
+_TAGS_TECNICOS = [
+    ("HDMI A VGA", "Conversión HDMI a VGA"),
+    ("DISPLAY PORT A VGA", "DisplayPort a VGA"),
+    ("DISPLAYPORT A VGA", "DisplayPort a VGA"),
+    ("DISPLAYPORT A HDMI", "DisplayPort a HDMI"),
+    ("DISPLAY PORT A HDMI", "DisplayPort a HDMI"),
+    ("DISPLAYPORT", "Interfaz DisplayPort"),
+    ("DISPLAY PORT", "Interfaz DisplayPort"),
+    ("HDMI", "Video HDMI"),
+    ("VGA", "Video VGA"),
+    ("DVI", "Video DVI"),
+    ("3RCA", "Audio/Video 3RCA"),
+    ("RCA", "Video RCA"),
+    ("OTG", "Función OTG"),
+    ("TIPO C", "Conector USB-C"),
+    ("USB C", "Conector USB-C"),
+    ("USB", "Interfaz USB"),
+    ("SATA", "Bus SATA 3.0"),
+    ("RJ45", "Ethernet RJ45"),
+    ("CAT.6", "Categoría 6"),
+    ("CAT 6", "Categoría 6"),
+    ("CAT. 6", "Categoría 6"),
+    ("CAT.5E", "Categoría 5e"),
+    ("CAT. 5E", "Categoría 5e"),
+    ("CAT5", "Categoría 5"),
+    ("5E", "Categoría 5e"),
+    ("BLUETOOTH", "Bluetooth"),
+    ("DUAL BAND", "Doble banda"),
+    ("WIFE", "Conectividad Wi-Fi"),
+    ("WIFI", "Conectividad Wi-Fi"),
+    ("INALAMBRICO", "Inalámbrico"),
+    ("INALAMBRICOS", "Inalámbrico"),
+    ("ALAMBRICO", "Conexión por cable"),
+    ("ALAMBRICOS", "Conexión por cable"),
+    ("MICROFONO", "Con micrófono"),
+    ("GAMER", "Línea Gamer"),
+    ("GAMING", "Línea Gamer"),
+    ("RGB", "Iluminación RGB"),
+    ("4K", "Soporte 4K UHD"),
+    ("2K", "Resolución 2K"),
+    ("SSD", "Estado sólido SSD"),
+    ("DDR4", "DDR4"),
+    ("DDR3", "DDR3"),
+    ("TWS", "Estéreo TWS"),
+    ("EXTERIOR", "Uso exterior"),
+    ("INTERIOR", "Uso interior"),
+]
+
+_MARCAS_CONOCIDAS = [
+    "SPIDERTEC", "SPIDETREC", "GENIUS", "REDRAGON", "LOGITECH", "TP LINK", "TP-LINK",
+    "MERCUSYS", "KINGSTON", "CRUCIAL", "UNNO TECNO", "UNNO TKNO", "CORSAIR", "EVGA",
+    "GAMEMAX", "ONIKUMA", "BEGPROD", "NEXCOM", "SAMSUM", "SAMSUNG",
+]
+
+
+def obtener_descripcion_caracteristicas(p: Dict[str, Any]) -> str:
+    """
+    Retorna la descripción personalizada del artículo o genera automáticamente
+    un resumen corto con categoría, especificaciones técnicas y marca (máx. ~95 caracteres).
+    """
+    desc_manual = (p.get("descripcion") or "").strip()
+    if desc_manual:
+        return desc_manual[:95] + ("..." if len(desc_manual) > 95 else "")
+
+    nombre_up = (p.get("nombre") or "").upper()
+    partes = []
+
+    cat = "Hardware / Accesorio"
+    for claves, etiqueta in _CATEGORIAS_DESC:
+        if any(k in nombre_up for k in claves):
+            cat = etiqueta
+            break
+    partes.append(cat)
+
+    # Extraer medidas relevantes (mts, GB, TB, Mbps, W, ")
+    medidas = re.findall(r'\b\d+(?:[.,]\d+)?\s*(?:MTS?\.?|MT\.?|GB|TB|MBPS|W|HZ|AH)\b|\b\d{2}"', nombre_up)
+    for m in medidas[:2]:
+        limpia = m.replace(".", "").strip()
+        if limpia and limpia not in partes:
+            partes.append(limpia)
+
+    # Extraer especificaciones clave sin duplicar conceptos
+    specs_agregadas = 0
+    for token, desc_token in _TAGS_TECNICOS:
+        if token in nombre_up and desc_token not in partes:
+            texto_acum = " ".join(partes).upper()
+            primera_palabra = desc_token.split()[-1].upper()
+            if primera_palabra in texto_acum:
+                continue
+            partes.append(desc_token)
+            specs_agregadas += 1
+            if specs_agregadas >= 2:
+                break
+
+    if "CON AUDIO" in nombre_up and "AUDIO" not in " ".join(partes).upper():
+        partes.append("Salida de audio")
+
+    for marca in _MARCAS_CONOCIDAS:
+        if marca in nombre_up:
+            m_clean = "Spidertec" if marca == "SPIDETREC" else ("Samsung" if marca == "SAMSUM" else ("Unno Tecno" if marca == "UNNO TKNO" else marca.title()))
+            partes.append(f"Marca {m_clean}")
+            break
+
+    resumen = " • ".join(partes)
+    return resumen[:95] + ("..." if len(resumen) > 95 else "")
+
+
 def obtener_productos(filtro: str = "", solo_stock: bool = False, solo_agotados: bool = False) -> List[Dict[str, Any]]:
-    """Consulta y filtra productos activos en tiempo real por SKU, Nombre o Ubicación."""
+    """
+    Consulta y filtra productos activos por SKU, Nombre, Ubicación o Descripción.
+    Orden obligatorio: Primero artículos con stock (> 0) ordenados A-Z, luego agotados (= 0) ordenados A-Z.
+    """
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -540,49 +686,58 @@ def obtener_productos(filtro: str = "", solo_stock: bool = False, solo_agotados:
 
     if filtro.strip():
         term = f"%{filtro.strip()}%"
-        query += " AND (sku LIKE ? OR nombre LIKE ? OR ubicacion_nota LIKE ?)"
-        params.extend([term, term, term])
+        query += " AND (sku LIKE ? OR nombre LIKE ? OR ubicacion_nota LIKE ? OR COALESCE(descripcion, '') LIKE ?)"
+        params.extend([term, term, term, term])
 
     if solo_stock:
         query += " AND cantidad > 0"
     elif solo_agotados:
         query += " AND cantidad = 0"
 
-    query += " ORDER BY id ASC"
+    query += " ORDER BY (CASE WHEN cantidad > 0 THEN 0 ELSE 1 END) ASC, UPPER(TRIM(nombre)) ASC, id ASC"
 
     cursor.execute(query, params)
     rows = cursor.fetchall()
-    productos = [dict(row) for row in rows]
+    productos = []
+    for row in rows:
+        d = dict(row)
+        d["descripcion_corta"] = obtener_descripcion_caracteristicas(d)
+        productos.append(d)
     conn.close()
     return productos
 
 
 def obtener_producto_por_id(producto_id: int) -> Optional[Dict[str, Any]]:
-    """Devuelve los datos de un producto específico."""
+    """Devuelve los datos de un producto específico con su descripción corta."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM productos WHERE id = ? AND activo = 1", (producto_id,))
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else None
+    if not row:
+        return None
+    d = dict(row)
+    d["descripcion_corta"] = obtener_descripcion_caracteristicas(d)
+    return d
 
 
 def agregar_producto(sku: str, nombre: str, cantidad: int, precio_detal: Optional[float],
-                     precio_descuento: Optional[float], costo: Optional[float], ubicacion: Optional[str]) -> bool:
+                     precio_descuento: Optional[float], costo: Optional[float],
+                     ubicacion: Optional[str], descripcion: Optional[str] = None) -> bool:
     """Inserta un nuevo artículo en la base de datos."""
     conn = get_connection()
     cursor = conn.cursor()
     sku_norm = sku.strip().upper()
     nombre_norm = nombre.strip().upper()
     ubicacion_norm = ubicacion.strip() if ubicacion and ubicacion.strip() else None
+    desc_norm = descripcion.strip() if descripcion and descripcion.strip() else None
 
     try:
-        # Si existía un registro borrado lógicamente con el mismo SKU, lo eliminamos físicamente para permitir reutilizar el SKU
         cursor.execute("DELETE FROM productos WHERE sku = ? AND activo = 0", (sku_norm,))
         cursor.execute("""
-        INSERT INTO productos (sku, nombre, cantidad, precio_detal_usd, precio_descuento_usd, costo_usd, ubicacion_nota)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
-        """, (sku_norm, nombre_norm, cantidad, precio_detal, precio_descuento, costo, ubicacion_norm))
+        INSERT INTO productos (sku, nombre, cantidad, precio_detal_usd, precio_descuento_usd, costo_usd, ubicacion_nota, descripcion)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        """, (sku_norm, nombre_norm, cantidad, precio_detal, precio_descuento, costo, ubicacion_norm, desc_norm))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -592,20 +747,22 @@ def agregar_producto(sku: str, nombre: str, cantidad: int, precio_detal: Optiona
 
 
 def actualizar_producto(producto_id: int, sku: str, nombre: str, cantidad: int, precio_detal: Optional[float],
-                        precio_descuento: Optional[float], costo: Optional[float], ubicacion: Optional[str]) -> bool:
+                        precio_descuento: Optional[float], costo: Optional[float],
+                        ubicacion: Optional[str], descripcion: Optional[str] = None) -> bool:
     """Actualiza los datos de un artículo existente."""
     conn = get_connection()
     cursor = conn.cursor()
     sku_norm = sku.strip().upper()
     nombre_norm = nombre.strip().upper()
     ubicacion_norm = ubicacion.strip() if ubicacion and ubicacion.strip() else None
+    desc_norm = descripcion.strip() if descripcion and descripcion.strip() else None
 
     try:
         cursor.execute("""
         UPDATE productos 
-        SET sku = ?, nombre = ?, cantidad = ?, precio_detal_usd = ?, precio_descuento_usd = ?, costo_usd = ?, ubicacion_nota = ?, fecha_actualizacion = CURRENT_TIMESTAMP
+        SET sku = ?, nombre = ?, cantidad = ?, precio_detal_usd = ?, precio_descuento_usd = ?, costo_usd = ?, ubicacion_nota = ?, descripcion = ?, fecha_actualizacion = CURRENT_TIMESTAMP
         WHERE id = ?;
-        """, (sku_norm, nombre_norm, cantidad, precio_detal, precio_descuento, costo, ubicacion_norm, producto_id))
+        """, (sku_norm, nombre_norm, cantidad, precio_detal, precio_descuento, costo, ubicacion_norm, desc_norm, producto_id))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
